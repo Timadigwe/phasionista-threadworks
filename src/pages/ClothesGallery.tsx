@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Search, Filter, Grid, List, SlidersHorizontal } from "lucide-react";
+import { Search, Filter, Grid, List, SlidersHorizontal, ArrowLeft, Plus } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useClothes } from "@/hooks/useClothes";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +32,7 @@ import featuredCloth1 from "@/assets/featured-cloth1.jpg";
 import featuredCloth2 from "@/assets/featured-cloth2.jpg";
 
 export const ClothesGallery = () => {
+  const { user, isAuthenticated } = useAuth();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("featured");
@@ -36,42 +41,53 @@ export const ClothesGallery = () => {
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
 
-  // Sample clothes data
-  const allClothes = [
-    {
-      id: "1",
-      styleName: "Elegant Evening Dress",
-      price: 299.99,
-      images: [featuredCloth1],
-      ownerName: "DesignerAlice",
-      ownerAvatar: "/api/placeholder/32/32",
-      isAvailable: true,
-      rating: 5,
-      reviewCount: 24,
-      clothStyle: "Evening Wear",
-      isFavorited: false,
-      category: "dresses",
-      size: "M",
-      color: "black"
-    },
-    {
-      id: "2",
-      styleName: "Contemporary Casual Set",
-      price: 149.99,
-      images: [featuredCloth2],
-      ownerName: "ModernMuse",
-      ownerAvatar: "/api/placeholder/32/32",
-      isAvailable: true,
-      rating: 4,
-      reviewCount: 18,
-      clothStyle: "Casual",
-      isFavorited: true,
-      category: "sets",
-      size: "L",
-      color: "beige"
-    },
-    // Add more sample data as needed
-  ];
+  // Use custom hook for data fetching
+  const { clothes: allClothes, isLoading, error } = useClothes();
+
+  // Check if user is a designer
+  const isDesigner = user?.user_metadata?.role === 'designer';
+
+  // Transform clothes data for display
+  const transformedClothes = allClothes.map(cloth => ({
+    id: cloth.id,
+    styleName: cloth.name,
+    price: cloth.price,
+    images: cloth.images && cloth.images.length > 0 ? cloth.images : ['/api/placeholder/300/400'],
+    ownerName: 'Designer', // We'll need to join with users table for actual name
+    ownerAvatar: "/api/placeholder/32/32",
+    ownerId: cloth.owner_id, // Add owner ID for permission checks
+    isAvailable: cloth.is_available,
+    rating: 4.5 + Math.random() * 0.5, // Mock rating for now
+    reviewCount: Math.floor(Math.random() * 50) + 10,
+    clothStyle: cloth.category,
+    isFavorited: false,
+    category: cloth.category?.toLowerCase() || 'clothing',
+    size: cloth.size,
+    color: cloth.color,
+    measurements: cloth.measurements,
+    description: cloth.description
+  }));
+
+  // Filter clothes based on search and filters
+  const filteredClothes = transformedClothes.filter(cloth => {
+    const matchesSearch = searchQuery === '' || 
+      cloth.styleName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cloth.ownerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cloth.clothStyle.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCategory = selectedCategories.length === 0 || 
+      selectedCategories.includes(cloth.category);
+    
+    const matchesSize = selectedSizes.length === 0 || 
+      selectedSizes.includes(cloth.size);
+    
+    const matchesColor = selectedColors.length === 0 || 
+      selectedColors.includes(cloth.color?.toLowerCase());
+    
+    const matchesPrice = cloth.price >= priceRange[0] && cloth.price <= priceRange[1];
+    
+    return matchesSearch && matchesCategory && matchesSize && matchesColor && matchesPrice;
+  });
 
   const categories = [
     { id: "dresses", label: "Dresses", count: 234 },
@@ -211,7 +227,7 @@ export const ClothesGallery = () => {
   );
 
   return (
-    <Layout>
+    <>
       <div className="container-custom py-8">
         {/* Header */}
         <motion.div
@@ -219,10 +235,30 @@ export const ClothesGallery = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl md:text-4xl font-bold mb-4">Fashion Gallery</h1>
-          <p className="text-lg text-muted-foreground">
-            Discover unique pieces from talented designers worldwide
-          </p>
+          <div className="flex items-center gap-4 mb-4">
+            <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
+              <Link to="/" className="flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Back to Home
+              </Link>
+            </Button>
+          </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold mb-4">Fashion Gallery</h1>
+              <p className="text-lg text-muted-foreground">
+                Discover unique pieces from talented designers worldwide
+              </p>
+            </div>
+            {isAuthenticated && isDesigner && (
+              <Button asChild className="btn-hero">
+                <Link to="/create" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create New Item
+                </Link>
+              </Button>
+            )}
+          </div>
         </motion.div>
 
         {/* Search and Controls */}
@@ -320,7 +356,7 @@ export const ClothesGallery = () => {
             {/* Results Header */}
             <div className="flex justify-between items-center mb-6">
               <p className="text-muted-foreground">
-                Showing {allClothes.length} of 1,234 results
+                {isLoading ? "Loading..." : `Showing ${filteredClothes.length} results`}
               </p>
               <div className="flex gap-2">
                 {selectedCategories.map((categoryId) => {
@@ -341,25 +377,44 @@ export const ClothesGallery = () => {
             </div>
 
             {/* Clothes Grid */}
-            <div className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
-                : "space-y-6"
-            }>
-              {allClothes.map((cloth, index) => (
-                <motion.div
-                  key={cloth.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <ClothCard 
-                    {...cloth}
-                    className={viewMode === "list" ? "flex" : ""}
-                  />
-                </motion.div>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                {[...Array(8)].map((_, index) => (
+                  <div key={index} className="animate-pulse">
+                    <div className="bg-muted rounded-lg h-64 mb-4"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 bg-muted rounded w-3/4"></div>
+                      <div className="h-4 bg-muted rounded w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : allClothes.length > 0 ? (
+              <div className={
+                viewMode === "grid"
+                  ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
+                  : "space-y-6"
+              }>
+                {filteredClothes.map((cloth, index) => (
+                  <motion.div
+                    key={cloth.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <ClothCard 
+                      {...cloth}
+                      className={viewMode === "list" ? "flex" : ""}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">No clothes found</p>
+                <p className="text-muted-foreground">Try adjusting your filters or search terms</p>
+              </div>
+            )}
 
             {/* Load More */}
             <div className="text-center mt-12">
@@ -368,8 +423,53 @@ export const ClothesGallery = () => {
               </Button>
             </div>
           </motion.main>
+          
+            {/* Empty State */}
+            {!isLoading && filteredClothes.length === 0 && (
+              <div className="text-center py-20">
+                <div className="text-6xl mb-4">👗</div>
+                <h3 className="text-xl font-semibold mb-2">No clothes found</h3>
+                <p className="text-muted-foreground mb-6">
+                  {isAuthenticated && isDesigner 
+                    ? "Be the first to create an item!" 
+                    : "Try adjusting your search or filter criteria"
+                  }
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  {isAuthenticated && isDesigner && (
+                    <Button asChild className="btn-hero">
+                      <Link to="/create" className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Create First Item
+                      </Link>
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategories([]);
+                    setSelectedSizes([]);
+                    setSelectedColors([]);
+                    setPriceRange([0, 1000]);
+                  }}>
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
+            )}
         </div>
       </div>
-    </Layout>
+      
+      {/* Floating Action Button for Mobile */}
+      {isAuthenticated && isDesigner && (
+        <div className="fixed bottom-6 right-6 z-50 md:hidden">
+          <Button asChild size="lg" className="rounded-full shadow-lg btn-hero">
+            <Link to="/create" className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              <span className="hidden sm:inline">Create</span>
+            </Link>
+          </Button>
+        </div>
+      )}
+    </>
   );
 };

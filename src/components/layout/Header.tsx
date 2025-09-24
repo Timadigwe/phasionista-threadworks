@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Menu, X, Search, Heart, ShoppingBag, User, Bell } from "lucide-react";
+import { Menu, X, Search, Heart, ShoppingBag, User, LogOut, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,44 +13,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
 import phasionisterLogo from "@/assets/phasionistar-logo.png";
 
-interface HeaderProps {
-  userRole?: "customer" | "designer" | "admin" | null;
-}
+interface HeaderProps {}
 
-export const Header = ({ userRole = null }: HeaderProps) => {
+export const Header = ({}: HeaderProps) => {
+  const { user, isAuthenticated, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Get user metadata from Supabase user
+  const userMetadata = user?.user_metadata || {};
+  const phasionName = userMetadata.phasion_name || user?.email?.split('@')[0] || 'User';
+  const solanaWallet = userMetadata.solana_wallet;
+
+  // Handle search functionality
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      // Navigate to clothes page with search query
+      window.location.href = `/clothes?search=${encodeURIComponent(searchQuery.trim())}`;
+    }
+  };
+
   const navLinks = [
-    { href: "/", label: "Home" },
     { href: "/clothes", label: "Clothes" },
     { href: "/designers", label: "Designers" },
     { href: "/how-it-works", label: "How It Works" },
   ];
 
-  const userNavLinks = {
-    customer: [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/orders", label: "My Orders" },
-      { href: "/favorites", label: "Favorites" },
-    ],
-    designer: [
-      { href: "/dashboard", label: "Dashboard" },
-      { href: "/my-clothes", label: "My Clothes" },
-      { href: "/create", label: "Create" },
-      { href: "/orders", label: "Orders" },
-    ],
-    admin: [
-      { href: "/admin", label: "Admin Panel" },
-      { href: "/users", label: "Users" },
-      { href: "/transactions", label: "Transactions" },
-    ],
-  };
 
   return (
     <motion.header
@@ -74,40 +70,29 @@ export const Header = ({ userRole = null }: HeaderProps) => {
               <Link
                 key={link.href}
                 to={link.href}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
+                className={`text-sm font-medium transition-all duration-200 hover:text-primary hover:scale-105 ${
                   isActive(link.href)
-                    ? "text-primary"
-                    : "text-muted-foreground"
+                    ? "text-primary border-b-2 border-primary pb-1"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
             
-            {userRole && userNavLinks[userRole]?.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  isActive(link.href)
-                    ? "text-primary"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
           </nav>
 
           {/* Search Bar - Desktop */}
           <div className="hidden lg:flex items-center space-x-4 flex-1 max-w-md ml-8">
-            <div className="relative w-full">
+            <form onSubmit={handleSearch} className="relative w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search clothes, designers..."
                 className="pl-10 pr-4 py-2 w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           {/* Right Side Actions */}
@@ -122,50 +107,64 @@ export const Header = ({ userRole = null }: HeaderProps) => {
               <Search className="h-5 w-5" />
             </Button>
 
-            {userRole ? (
+            {isAuthenticated && user ? (
               // Authenticated User Actions
               <>
-                <Button variant="ghost" size="sm" className="relative">
-                  <Heart className="h-5 w-5" />
-                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
-                    3
-                  </Badge>
+                <Button variant="ghost" size="sm" className="relative" asChild>
+                  <Link to="/favorites">
+                    <Heart className="h-5 w-5" />
+                  </Link>
                 </Button>
                 
-                <Button variant="ghost" size="sm" className="relative">
-                  <ShoppingBag className="h-5 w-5" />
-                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs">
-                    2
-                  </Badge>
+                <Button variant="ghost" size="sm" className="relative" asChild>
+                  <Link to="/orders">
+                    <ShoppingBag className="h-5 w-5" />
+                  </Link>
                 </Button>
-                
-                <Button variant="ghost" size="sm" className="relative">
-                  <Bell className="h-5 w-5" />
-                  <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive">
-                    5
-                  </Badge>
-                </Button>
+
+                {/* Wallet Status Indicator */}
+                {solanaWallet && (
+                  <Button variant="ghost" size="sm" className="text-green-600">
+                    <Wallet className="h-5 w-5" />
+                  </Button>
+                )}
 
                 {/* User Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-105 transition-transform">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src="/avatars/01.png" alt="@username" />
-                        <AvatarFallback>JD</AvatarFallback>
+                        <AvatarImage src={userMetadata.avatar_url} alt={phasionName} />
+                        <AvatarFallback>{phasionName?.charAt(0).toUpperCase()}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuItem>
+                    <div className="flex items-center justify-start gap-2 p-2">
+                      <div className="flex flex-col space-y-1 leading-none">
+                        <p className="font-medium">{phasionName}</p>
+                        <p className="w-[200px] truncate text-sm text-muted-foreground">
+                          {user?.email}
+                        </p>
+                        {solanaWallet && (
+                          <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
+                            <Wallet className="h-3 w-3" />
+                            Wallet
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="hover:bg-muted">
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem className="hover:bg-muted">
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={logout} className="hover:bg-destructive hover:text-destructive-foreground">
+                      <LogOut className="mr-2 h-4 w-4" />
                       Sign out
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -203,13 +202,15 @@ export const Header = ({ userRole = null }: HeaderProps) => {
             exit={{ opacity: 0, height: 0 }}
             className="lg:hidden border-t border-border py-4"
           >
-            <div className="relative">
+            <form onSubmit={handleSearch} className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search clothes, designers..."
                 className="pl-10 pr-4 py-2 w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </form>
           </motion.div>
         )}
 
@@ -226,10 +227,10 @@ export const Header = ({ userRole = null }: HeaderProps) => {
                 <Link
                   key={link.href}
                   to={link.href}
-                  className={`text-sm font-medium transition-colors hover:text-primary ${
+                  className={`text-sm font-medium transition-all duration-200 hover:text-primary hover:scale-105 ${
                     isActive(link.href)
-                      ? "text-primary"
-                      : "text-muted-foreground"
+                      ? "text-primary border-l-4 border-primary pl-2"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() => setIsMenuOpen(false)}
                 >
@@ -237,22 +238,8 @@ export const Header = ({ userRole = null }: HeaderProps) => {
                 </Link>
               ))}
               
-              {userRole && userNavLinks[userRole]?.map((link) => (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className={`text-sm font-medium transition-colors hover:text-primary ${
-                    isActive(link.href)
-                      ? "text-primary"
-                      : "text-muted-foreground"
-                  }`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              ))}
               
-              {!userRole && (
+              {!isAuthenticated && (
                 <div className="flex flex-col space-y-2 pt-4 border-t border-border">
                   <Button variant="ghost" asChild>
                     <Link to="/login" onClick={() => setIsMenuOpen(false)}>

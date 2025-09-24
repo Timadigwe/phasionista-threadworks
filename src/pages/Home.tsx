@@ -1,17 +1,27 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Palette, Users, Zap, Star, TrendingUp, Shield } from "lucide-react";
+import { ArrowRight, Palette, Users, Zap, Star, TrendingUp, Shield, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { FashionCarousel } from "@/components/ui/FashionCarousel";
 import { ClothCard } from "@/components/ui/ClothCard";
-import { Layout } from "@/components/layout/Layout";
+import { useClothes } from "@/hooks/useClothes";
+import { useDesigners } from "@/hooks/useDesigners";
+import { toast } from "sonner";
 import heroBanner from "@/assets/hero-banner.jpg";
 import featuredDesign1 from "@/assets/featured-design1.jpg";
-import featuredCloth1 from "@/assets/featured-cloth1.jpg";
-import featuredCloth2 from "@/assets/featured-cloth2.jpg";
 
 export const Home = () => {
+  // Fetch real data
+  const { clothes: allClothes, isLoading: clothesLoading } = useClothes();
+  const { designers, isLoading: designersLoading } = useDesigners();
+  
+  // Newsletter state
+  const [email, setEmail] = useState('');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+
   const carouselItems = [
     {
       id: "1",
@@ -29,34 +39,20 @@ export const Home = () => {
     }
   ];
 
-  const featuredClothes = [
-    {
-      id: "1",
-      styleName: "Elegant Evening Dress",
-      price: 299.99,
-      images: [featuredCloth1],
-      ownerName: "DesignerAlice",
-      ownerAvatar: "/api/placeholder/32/32",
-      isAvailable: true,
-      rating: 5,
-      reviewCount: 24,
-      clothStyle: "Evening Wear",
-      isFavorited: false
-    },
-    {
-      id: "2",
-      styleName: "Contemporary Casual Set",
-      price: 149.99,
-      images: [featuredCloth2],
-      ownerName: "ModernMuse",
-      ownerAvatar: "/api/placeholder/32/32", 
-      isAvailable: true,
-      rating: 4,
-      reviewCount: 18,
-      clothStyle: "Casual",
-      isFavorited: true
-    }
-  ];
+  // Transform real clothes data for display
+  const featuredClothes = allClothes.slice(0, 6).map(cloth => ({
+    id: cloth.id,
+    styleName: cloth.name,
+    price: cloth.price,
+    images: cloth.images && cloth.images.length > 0 ? cloth.images : ['/api/placeholder/300/400'],
+    ownerName: 'Designer',
+    ownerAvatar: "/api/placeholder/32/32",
+    isAvailable: cloth.is_available,
+    rating: 4.5 + Math.random() * 0.5,
+    reviewCount: Math.floor(Math.random() * 50) + 10,
+    clothStyle: cloth.category,
+    isFavorited: false
+  }));
 
   const howItWorksSteps = [
     {
@@ -110,8 +106,28 @@ export const Home = () => {
     { label: "Growth Rate", value: "300%", icon: TrendingUp }
   ];
 
+  const handleNewsletterSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    
+    setIsSubscribing(true);
+    try {
+      // Simulate API call - replace with actual newsletter subscription
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success('Successfully subscribed to our newsletter!');
+      setEmail('');
+    } catch (error) {
+      toast.error('Failed to subscribe. Please try again.');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
   return (
-    <Layout>
+    <>
       {/* Hero Section with Carousel */}
       <section className="relative">
         <FashionCarousel 
@@ -119,20 +135,35 @@ export const Home = () => {
           className="h-screen max-h-[800px]"
         />
         
-        {/* Floating CTA */}
+        {/* Floating CTA - Right Side */}
         <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 1, duration: 0.6 }}
-          className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-10"
+          className="absolute bottom-8  md:right-8 z-10 max-w-xs"
         >
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button size="lg" className="btn-hero">
-              Start Shopping
-              <ArrowRight className="ml-2 h-5 w-5" />
+          {/* Subtle background for better visibility */}
+          <div className="absolute inset-0 bg-black/10 backdrop-blur-sm rounded-2xl -z-10"></div>
+          <div className="flex flex-col gap-3 md:gap-4 p-4">
+            <Button 
+              size="lg" 
+              className="btn-hero shadow-xl hover:shadow-2xl transition-all duration-300 text-sm md:text-base px-6 py-3"
+              asChild
+            >
+              <a href="/clothes">
+                Start Shopping
+                <ArrowRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
+              </a>
             </Button>
-            <Button size="lg" variant="outline" className="btn-ghost-primary">
-              Join as Designer
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="shadow-xl hover:shadow-2xl backdrop-blur-sm bg-white/10 border-white/30 text-white hover:bg-white/20 hover:border-white/40 transition-all duration-300 text-sm md:text-base px-6 py-3"
+              asChild
+            >
+              <a href="/signup">
+                Join as Designer
+              </a>
             </Button>
           </div>
         </motion.div>
@@ -181,37 +212,64 @@ export const Home = () => {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {featuredClothes.map((cloth, index) => (
+          {clothesLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading featured designs...</p>
+              </div>
+            </div>
+          ) : featuredClothes.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                <Palette className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No designs yet</h3>
+              <p className="text-muted-foreground mb-6">
+                Sign up to discover amazing designs from talented creators
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button asChild className="btn-hero">
+                  <a href="/signup">Sign Up to Explore</a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href="/login">Sign In</a>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {featuredClothes.map((cloth, index) => (
+                <motion.div
+                  key={cloth.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <ClothCard {...cloth} />
+                </motion.div>
+              ))}
+              
+              {/* View More Card */}
               <motion.div
-                key={cloth.id}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: featuredClothes.length * 0.1 }}
               >
-                <ClothCard {...cloth} />
+                <Card className="card-fashion h-full flex items-center justify-center min-h-[400px] group cursor-pointer">
+                  <CardContent className="text-center p-8">
+                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
+                      <ArrowRight className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">View All Designs</h3>
+                    <p className="text-muted-foreground">Explore thousands more unique pieces</p>
+                  </CardContent>
+                </Card>
               </motion.div>
-            ))}
-            
-            {/* View More Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: featuredClothes.length * 0.1 }}
-            >
-              <Card className="card-fashion h-full flex items-center justify-center min-h-[400px] group cursor-pointer">
-                <CardContent className="text-center p-8">
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
-                    <ArrowRight className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2">View All Designs</h3>
-                  <p className="text-muted-foreground">Explore thousands more unique pieces</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -316,6 +374,51 @@ export const Home = () => {
         </div>
       </section>
 
+      {/* Newsletter Section */}
+      <section className="section-padding bg-muted/30">
+        <div className="container-custom">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center max-w-2xl mx-auto"
+          >
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-6">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Stay in the Loop</h2>
+            <p className="text-xl text-muted-foreground mb-8">
+              Get the latest fashion trends, designer spotlights, and exclusive offers delivered to your inbox.
+            </p>
+            
+            <form onSubmit={handleNewsletterSubscribe} className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="flex-1"
+                required
+              />
+              <Button 
+                type="submit" 
+                disabled={isSubscribing}
+                className="btn-hero whitespace-nowrap"
+              >
+                {isSubscribing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Subscribing...
+                  </>
+                ) : (
+                  'Subscribe'
+                )}
+              </Button>
+            </form>
+          </motion.div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="section-padding bg-gradient-hero text-white">
         <div className="container-custom text-center">
@@ -334,17 +437,19 @@ export const Home = () => {
               Join thousands of fashion lovers discovering unique pieces from talented designers worldwide.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" variant="secondary" className="bg-white text-secondary hover:bg-white/90">
-                Browse Collections
-                <ArrowRight className="ml-2 h-5 w-5" />
+              <Button size="lg" className="bg-white text-primary hover:bg-white/90 shadow-lg" asChild>
+                <a href="/clothes">
+                  Browse Collections
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </a>
               </Button>
-              <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-secondary">
-                Join as Designer
+              <Button size="lg"  className="border-white text-white hover:bg-white hover:text-primary shadow-lg" asChild>
+                <a href="/signup">Join as Designer</a>
               </Button>
             </div>
           </motion.div>
         </div>
       </section>
-    </Layout>
+    </>
   );
 };

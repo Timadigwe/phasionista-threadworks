@@ -1,9 +1,13 @@
 import { motion } from "framer-motion";
-import { Heart, ShoppingBag, Star, Eye } from "lucide-react";
+import { Heart, ShoppingBag, Star, Eye, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabaseApi } from "@/services/supabaseApi";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface ClothCardProps {
   id: string;
@@ -17,9 +21,12 @@ interface ClothCardProps {
   rating?: number;
   reviewCount?: number;
   clothStyle: string;
+  ownerId?: string;
   onFavorite?: (id: string) => void;
   onAddToCart?: (id: string) => void;
   onView?: (id: string) => void;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
   className?: string;
 }
 
@@ -35,11 +42,36 @@ export const ClothCard = ({
   rating = 0,
   reviewCount = 0,
   clothStyle,
+  ownerId,
   onFavorite,
   onAddToCart,
   onView,
+  onEdit,
+  onDelete,
   className = "",
 }: ClothCardProps) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isOwner = user?.id === ownerId;
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await supabaseApi.deleteCloth(id);
+      toast.success('Item deleted successfully!');
+      onDelete?.(id);
+    } catch (error: any) {
+      console.error('Error deleting cloth:', error);
+      toast.error(`Failed to delete item: ${error.message}`);
+    }
+  };
+
+  const handleEdit = () => {
+    navigate(`/edit-cloth/${id}`);
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -59,16 +91,18 @@ export const ClothCard = ({
           {/* Overlay Actions */}
           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             <div className="absolute top-4 right-4 flex flex-col space-y-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-8 w-8 p-0 rounded-full shadow-medium"
-                onClick={() => onFavorite?.(id)}
-              >
-                <Heart 
-                  className={`h-4 w-4 ${isFavorited ? 'fill-destructive text-destructive' : ''}`}
-                />
-              </Button>
+              {!isOwner && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 w-8 p-0 rounded-full shadow-medium"
+                  onClick={() => onFavorite?.(id)}
+                >
+                  <Heart 
+                    className={`h-4 w-4 ${isFavorited ? 'fill-destructive text-destructive' : ''}`}
+                  />
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="secondary"
@@ -77,6 +111,26 @@ export const ClothCard = ({
               >
                 <Eye className="h-4 w-4" />
               </Button>
+              {isOwner && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 w-8 p-0 rounded-full shadow-medium"
+                    onClick={handleEdit}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-8 w-8 p-0 rounded-full shadow-medium"
+                    onClick={handleDelete}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
