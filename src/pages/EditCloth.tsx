@@ -56,10 +56,7 @@ export const EditCloth = () => {
       
       try {
         setIsLoading(true);
-        // For now, we'll need to get the cloth data from the clothes list
-        // In a real app, you'd have a getClothById function
-        const response = await supabaseApi.getClothes();
-        const cloth = response.clothes.find((c: any) => c.id === id);
+        const cloth = await supabaseApi.getClothById(id);
         
         if (cloth) {
           console.log('Loading cloth data:', cloth);

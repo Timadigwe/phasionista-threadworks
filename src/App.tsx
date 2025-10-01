@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SolanaWalletProvider } from "./services/solanaWallet";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { ProtectedRoute, PublicRoute } from "./components/auth/ProtectedRoute";
 import { Layout } from "./components/layout/Layout";
 
@@ -25,6 +25,7 @@ import { Favorites } from "./pages/Favorites";
 import { MyClothes } from "./pages/MyClothes";
 import { Create } from "./pages/Create";
 import { EditCloth } from "./pages/EditCloth";
+import { Profile } from "./pages/Profile";
 
 // Admin pages
 import { Admin } from "./pages/Admin";
@@ -36,19 +37,17 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <SolanaWalletProvider>
-        <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
+  <QueryClientProvider client={queryClient}>
+    <SolanaWalletProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <ErrorBoundary>
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<Layout><Home /></Layout>} />
-                <Route path="/clothes" element={<Layout><ClothesGallery /></Layout>} />
-                <Route path="/designers" element={<Layout><Designers /></Layout>} />
                 <Route path="/how-it-works" element={<Layout><HowItWorks /></Layout>} />
                 
                 {/* Auth Routes (redirect if authenticated) */}
@@ -57,6 +56,16 @@ const App = () => (
                 <Route path="/verify-email" element={<EmailVerification />} />
                 
                 {/* Protected Routes */}
+                <Route path="/clothes" element={
+                  <ProtectedRoute>
+                    <Layout><ClothesGallery /></Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/designers" element={
+                  <ProtectedRoute>
+                    <Layout><Designers /></Layout>
+                  </ProtectedRoute>
+                } />
                 <Route path="/dashboard" element={
                   <ProtectedRoute>
                     <Layout><Dashboard /></Layout>
@@ -87,6 +96,11 @@ const App = () => (
                     <Layout><EditCloth /></Layout>
                   </ProtectedRoute>
                 } />
+                <Route path="/profile" element={
+                  <ProtectedRoute>
+                    <Layout><Profile /></Layout>
+                  </ProtectedRoute>
+                } />
                 
                 {/* Admin Routes */}
                 <Route path="/admin" element={
@@ -108,12 +122,12 @@ const App = () => (
                 {/* 404 Route */}
                 <Route path="*" element={<Layout><NotFound /></Layout>} />
               </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </AuthProvider>
-      </SolanaWalletProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
+            </ErrorBoundary>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </SolanaWalletProvider>
+  </QueryClientProvider>
 );
 
 export default App;

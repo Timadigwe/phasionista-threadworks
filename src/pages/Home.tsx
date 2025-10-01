@@ -6,18 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FashionCarousel } from "@/components/ui/FashionCarousel";
-import { ClothCard } from "@/components/ui/ClothCard";
-import { useClothes } from "@/hooks/useClothes";
-import { useDesigners } from "@/hooks/useDesigners";
+// Removed ClothCard, useClothes, useDesigners imports since we removed featured clothes section
 import { toast } from "sonner";
 import heroBanner from "@/assets/hero-banner.jpg";
 import featuredDesign1 from "@/assets/featured-design1.jpg";
 
 export const Home = () => {
-  // Fetch real data
-  const { clothes: allClothes, isLoading: clothesLoading } = useClothes();
-  const { designers, isLoading: designersLoading } = useDesigners();
-  
   // Newsletter state
   const [email, setEmail] = useState('');
   const [isSubscribing, setIsSubscribing] = useState(false);
@@ -28,31 +22,18 @@ export const Home = () => {
       title: "Discover Unique Fashion",
       subtitle: "Connect with talented designers and find one-of-a-kind pieces",
       image: heroBanner,
-      link: "/clothes"
+      link: "/signup"
     },
     {
       id: "2", 
       title: "Designer Spotlight",
       subtitle: "Featured creators pushing fashion boundaries",
       image: featuredDesign1,
-      link: "/designers"
+      link: "/signup"
     }
   ];
 
-  // Transform real clothes data for display
-  const featuredClothes = allClothes.slice(0, 6).map(cloth => ({
-    id: cloth.id,
-    styleName: cloth.name,
-    price: cloth.price,
-    images: cloth.images && cloth.images.length > 0 ? cloth.images : ['/api/placeholder/300/400'],
-    ownerName: 'Designer',
-    ownerAvatar: "/api/placeholder/32/32",
-    isAvailable: cloth.is_available,
-    rating: 4.5 + Math.random() * 0.5,
-    reviewCount: Math.floor(Math.random() * 50) + 10,
-    clothStyle: cloth.category,
-    isFavorited: false
-  }));
+  // Removed featuredClothes transformation since we removed the featured clothes section
 
   const howItWorksSteps = [
     {
@@ -150,8 +131,8 @@ export const Home = () => {
               className="btn-hero shadow-xl hover:shadow-2xl transition-all duration-300 text-sm md:text-base px-6 py-3"
               asChild
             >
-              <a href="/clothes">
-                Start Shopping
+              <a href="/signup">
+                Get Started
                 <ArrowRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
               </a>
             </Button>
@@ -196,82 +177,6 @@ export const Home = () => {
         </div>
       </section>
 
-      {/* Featured Clothes Section */}
-      <section className="section-padding">
-        <div className="container-custom">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <Badge variant="secondary" className="mb-4">Featured</Badge>
-            <h2 className="text-section-title mb-4">Trending Designs</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Discover the latest creations from our most talented designers
-            </p>
-          </motion.div>
-
-          {clothesLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-                <p className="text-muted-foreground">Loading featured designs...</p>
-              </div>
-            </div>
-          ) : featuredClothes.length === 0 ? (
-            <div className="text-center py-20">
-              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                <Palette className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">No designs yet</h3>
-              <p className="text-muted-foreground mb-6">
-                Sign up to discover amazing designs from talented creators
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button asChild className="btn-hero">
-                  <a href="/signup">Sign Up to Explore</a>
-                </Button>
-                <Button asChild variant="outline">
-                  <a href="/login">Sign In</a>
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {featuredClothes.map((cloth, index) => (
-                <motion.div
-                  key={cloth.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <ClothCard {...cloth} />
-                </motion.div>
-              ))}
-              
-              {/* View More Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: featuredClothes.length * 0.1 }}
-              >
-                <Card className="card-fashion h-full flex items-center justify-center min-h-[400px] group cursor-pointer">
-                  <CardContent className="text-center p-8">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
-                      <ArrowRight className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">View All Designs</h3>
-                    <p className="text-muted-foreground">Explore thousands more unique pieces</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-          )}
-        </div>
-      </section>
 
       {/* How It Works Section */}
       <section className="section-padding bg-muted/30">
@@ -438,8 +343,8 @@ export const Home = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" className="bg-white text-primary hover:bg-white/90 shadow-lg" asChild>
-                <a href="/clothes">
-                  Browse Collections
+                <a href="/signup">
+                  Get Started
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </a>
               </Button>

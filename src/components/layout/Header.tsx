@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Menu, X, Search, Heart, ShoppingBag, User, LogOut, Wallet } from "lucide-react";
@@ -14,23 +14,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import phasionisterLogo from "@/assets/phasionistar-logo.png";
 
 interface HeaderProps {}
 
 export const Header = ({}: HeaderProps) => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, profile, isAuthenticated, logout, fetchProfile } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
+
+  // Fetch profile when user is authenticated but profile is not loaded
+  useEffect(() => {
+    if (isAuthenticated && user && !profile) {
+      fetchProfile();
+    }
+  }, [isAuthenticated, user, profile, fetchProfile]);
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Get user metadata from Supabase user
-  const userMetadata = user?.user_metadata || {};
-  const phasionName = userMetadata.phasion_name || user?.email?.split('@')[0] || 'User';
-  const solanaWallet = userMetadata.solana_wallet;
+  // Get user data from profile
+  const phasionName = profile?.phasion_name || user?.email?.split('@')[0] || 'User';
+  const solanaWallet = profile?.solana_wallet;
 
   // Handle search functionality
   const handleSearch = (e: React.FormEvent) => {
@@ -41,10 +49,36 @@ export const Header = ({}: HeaderProps) => {
     }
   };
 
+  // Handle logout with loading state and feedback
+  const handleLogout = async () => {
+    console.log('Starting logout process...');
+    try {
+      setIsLoggingOut(true);
+      console.log('Set loading state to true');
+      
+      console.log('Calling logout function...');
+      await logout();
+      console.log('Logout completed successfully');
+      toast.success('Successfully signed out');
+      // Close mobile menu if open
+      setIsMenuOpen(false);
+    } catch (error: any) {
+      console.error('Logout error:', error);
+      toast.error('Failed to sign out. Please try again.');
+    } finally {
+      console.log('Setting loading state to false');
+      setIsLoggingOut(false);
+    }
+  };
+
   const navLinks = [
+    { href: "/how-it-works", label: "How It Works" },
+  ];
+
+  // Add authenticated-only links
+  const authenticatedNavLinks = [
     { href: "/clothes", label: "Clothes" },
     { href: "/designers", label: "Designers" },
-    { href: "/how-it-works", label: "How It Works" },
   ];
 
 
@@ -67,6 +101,21 @@ export const Header = ({}: HeaderProps) => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
             {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                to={link.href}
+                className={`text-sm font-medium transition-all duration-200 hover:text-primary hover:scale-105 ${
+                  isActive(link.href)
+                    ? "text-primary border-b-2 border-primary pb-1"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+            
+            {/* Show authenticated-only links */}
+            {isAuthenticated && authenticatedNavLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
@@ -134,7 +183,7 @@ export const Header = ({}: HeaderProps) => {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-105 transition-transform">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={userMetadata.avatar_url} alt={phasionName} />
+                        <AvatarImage src={profile?.avatar_url} alt={phasionName} />
                         <AvatarFallback>{phasionName?.charAt(0).toUpperCase()}</AvatarFallback>
                       </Avatar>
                     </Button>
@@ -155,17 +204,23 @@ export const Header = ({}: HeaderProps) => {
                       </div>
                     </div>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="hover:bg-muted">
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
+                    <DropdownMenuItem className="hover:bg-muted" asChild>
+                      <Link to="/profile">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="hover:bg-muted">
                       Settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="hover:bg-destructive hover:text-destructive-foreground">
+                    <DropdownMenuItem 
+                      onClick={handleLogout} 
+                      disabled={isLoggingOut}
+                      className="hover:bg-destructive hover:text-destructive-foreground disabled:opacity-50"
+                    >
                       <LogOut className="mr-2 h-4 w-4" />
-                      Sign out
+                      {isLoggingOut ? 'Signing out...' : 'Sign out'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -238,8 +293,23 @@ export const Header = ({}: HeaderProps) => {
                 </Link>
               ))}
               
+              {/* Show authenticated-only links in mobile menu */}
+              {isAuthenticated && authenticatedNavLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  className={`text-sm font-medium transition-all duration-200 hover:text-primary hover:scale-105 ${
+                    isActive(link.href)
+                      ? "text-primary border-l-4 border-primary pl-2"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
               
-              {!isAuthenticated && (
+              {!isAuthenticated ? (
                 <div className="flex flex-col space-y-2 pt-4 border-t border-border">
                   <Button variant="ghost" asChild>
                     <Link to="/login" onClick={() => setIsMenuOpen(false)}>
@@ -250,6 +320,22 @@ export const Header = ({}: HeaderProps) => {
                     <Link to="/signup" onClick={() => setIsMenuOpen(false)}>
                       Sign Up
                     </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-2 pt-4 border-t border-border">
+                  <Button variant="ghost" asChild>
+                    <Link to="/profile" onClick={() => setIsMenuOpen(false)}>
+                      Profile
+                    </Link>
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    {isLoggingOut ? 'Signing out...' : 'Sign Out'}
                   </Button>
                 </div>
               )}

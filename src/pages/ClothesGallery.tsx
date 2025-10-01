@@ -47,15 +47,18 @@ export const ClothesGallery = () => {
   // Check if user is a designer
   const isDesigner = user?.user_metadata?.role === 'designer';
 
+  // Debug: Log the raw clothes data
+  console.log('Raw clothes data from API:', allClothes);
+
   // Transform clothes data for display
   const transformedClothes = allClothes.map(cloth => ({
     id: cloth.id,
     styleName: cloth.name,
     price: cloth.price,
     images: cloth.images && cloth.images.length > 0 ? cloth.images : ['/api/placeholder/300/400'],
-    ownerName: 'Designer', // We'll need to join with users table for actual name
-    ownerAvatar: "/api/placeholder/32/32",
-    ownerId: cloth.owner_id, // Add owner ID for permission checks
+    ownerName: cloth.designer?.phasion_name || cloth.designer?.full_name || 'Designer',
+    ownerAvatar: cloth.designer?.avatar_url || "/api/placeholder/32/32",
+    ownerId: cloth.designer_id,
     isAvailable: cloth.is_available,
     rating: 4.5 + Math.random() * 0.5, // Mock rating for now
     reviewCount: Math.floor(Math.random() * 50) + 10,
@@ -65,7 +68,8 @@ export const ClothesGallery = () => {
     size: cloth.size,
     color: cloth.color,
     measurements: cloth.measurements,
-    description: cloth.description
+    description: cloth.description,
+    designer: cloth.designer
   }));
 
   // Filter clothes based on search and filters

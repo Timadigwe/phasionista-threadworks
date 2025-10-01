@@ -12,18 +12,15 @@ import { toast } from "sonner";
 
 interface Designer {
   id: string;
-  name: string;
   email: string;
-  specialty: string;
-  rating: number;
-  reviews: number;
-  location: string;
-  avatar: string;
-  verified: boolean;
-  priceRange: string;
-  description: string;
+  phasion_name: string;
+  full_name?: string;
+  bio?: string;
+  avatar_url?: string;
+  location?: string;
+  is_verified: boolean;
   clothesCount: number;
-  joinDate: string;
+  created_at: string;
 }
 
 export const Designers = () => {
@@ -36,9 +33,13 @@ export const Designers = () => {
   const { designers, isLoading, error } = useDesigners();
 
   const filteredDesigners = designers.filter(designer => {
-    const matchesSearch = designer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         designer.specialty.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSpecialty = selectedSpecialty === 'All' || designer.specialty === selectedSpecialty;
+    // Safe property access with fallbacks
+    const name = designer.phasion_name || designer.full_name || 'Unknown';
+    const specialty = designer.bio || 'General Fashion';
+    
+    const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         specialty.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSpecialty = selectedSpecialty === 'All' || specialty.includes(selectedSpecialty);
     return matchesSearch && matchesSpecialty;
   });
 
@@ -139,19 +140,19 @@ export const Designers = () => {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-3">
                         <Avatar className="h-12 w-12">
-                          <AvatarImage src={designer.avatar} alt={designer.name} />
-                          <AvatarFallback>{designer.name.charAt(0)}</AvatarFallback>
+                          <AvatarImage src={designer.avatar_url} alt={designer.phasion_name || designer.full_name} />
+                          <AvatarFallback>{(designer.phasion_name || designer.full_name || 'U').charAt(0).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="font-semibold">{designer.name}</h3>
-                            {designer.verified && (
+                            <h3 className="font-semibold">{designer.phasion_name || designer.full_name || 'Unknown Designer'}</h3>
+                            {designer.is_verified && (
                               <Badge variant="secondary" className="text-xs">
                                 Verified
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{designer.specialty}</p>
+                          <p className="text-sm text-muted-foreground">{designer.bio || 'Fashion Designer'}</p>
                         </div>
                       </div>
                     </div>
@@ -160,23 +161,23 @@ export const Designers = () => {
                   <CardContent className="space-y-4">
                     <div className="flex items-center gap-1">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                      <span className="font-medium">{designer.rating}</span>
+                      <span className="font-medium">4.5</span>
                       <span className="text-sm text-muted-foreground">
-                        ({designer.reviews} reviews)
+                        (New Designer)
                       </span>
                     </div>
                     
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4" />
-                      {designer.location}
+                      {designer.location || 'Location not specified'}
                     </div>
                     
                     <p className="text-sm text-muted-foreground line-clamp-2">
-                      {designer.description}
+                      {designer.bio || 'Talented fashion designer creating unique pieces.'}
                     </p>
                     
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-primary">{designer.priceRange}</span>
+                      <span className="font-medium text-primary">{designer.clothesCount || 0} items</span>
                       <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
                         View Profile
                       </Button>

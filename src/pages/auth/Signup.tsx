@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSolanaWallet } from "@/services/solanaWallet";
+import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -37,6 +39,7 @@ export const Signup = () => {
   const { signup } = useAuth();
   const navigate = useNavigate();
   const { connected, publicKey, connect, validateAddress } = useSolanaWallet();
+  const { select, wallets } = useWallet();
   const [formData, setFormData] = useState({
     phasionName: "",
     email: "",
@@ -271,7 +274,12 @@ export const Signup = () => {
                   <div className="text-center">
                     <div className="text-sm font-medium mb-2 text-primary">Connect Solana Wallet (Required)</div>
                     <div className="text-xs text-muted-foreground mb-3">
-                      Your wallet is required for secure payments and escrow transactions
+                      Your wallet is required for secure payments and escrow transactions. 
+                      {(!wallets || wallets.length === 0) && (
+                        <span className="block mt-1 text-amber-600">
+                          Please install <a href="https://phantom.app" target="_blank" rel="noopener noreferrer" className="underline">Phantom</a> or <a href="https://solflare.com" target="_blank" rel="noopener noreferrer" className="underline">Solflare</a> wallet first.
+                        </span>
+                      )}
                     </div>
                     {connected ? (
                       <div className="space-y-2">
@@ -291,10 +299,34 @@ export const Signup = () => {
                         className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground"
                         onClick={async () => {
                           try {
+                            // Check if any wallets are available
+                            if (!wallets || wallets.length === 0) {
+                              toast.error('No wallets detected. Please install Phantom or Solflare wallet.');
+                              return;
+                            }
+                            
+                            // Auto-select Phantom wallet if available, otherwise first wallet
+                            const phantomWallet = wallets.find(w => w.adapter.name === 'Phantom');
+                            const walletToSelect = phantomWallet || wallets[0];
+                            if (walletToSelect) {
+                              select(walletToSelect.adapter.name);
+                            }
+                            
                             await connect();
+                            toast.success('Wallet connected successfully!');
                           } catch (error: any) {
                             console.error('Wallet connection failed:', error);
-                            toast.error('Failed to connect wallet. Please try again.');
+                            
+                            // Handle specific error types
+                            if (error.name === 'WalletNotSelectedError') {
+                              toast.error('Please select a wallet first.');
+                            } else if (error.name === 'WalletNotFoundError') {
+                              toast.error('Wallet not found. Please install Phantom or Solflare wallet.');
+                            } else if (error.name === 'WalletConnectionError') {
+                              toast.error('Failed to connect to wallet. Please try again.');
+                            } else {
+                              toast.error('Failed to connect wallet. Please try again.');
+                            }
                           }
                         }}
                       >

@@ -1,253 +1,260 @@
 import { supabase } from '../lib/supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-
 export const supabaseApi = {
   // Clothes API
+  async getClothes(filters?: { category?: string; search?: string; priceMin?: number; priceMax?: number }) {
+    let query = supabase
+      .from('clothes')
+      .select(`
+        *,
+        designer:profiles!clothes_designer_id_fkey(
+          id,
+          phasion_name,
+          full_name,
+          avatar_url,
+          location,
+          bio
+        )
+      `)
+      .eq('is_available', true)
+      .order('created_at', { ascending: false });
+
+    if (filters?.category) {
+      query = query.eq('category', filters.category);
+    }
+
+    if (filters?.search) {
+      query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+    }
+
+    if (filters?.priceMin) {
+      query = query.gte('price', filters.priceMin);
+    }
+
+    if (filters?.priceMax) {
+      query = query.lte('price', filters.priceMax);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return { clothes: data || [] };
+  },
+
+  async getClothById(id: string) {
+    const { data, error } = await supabase
+      .from('clothes')
+      .select(`
+        *,
+        designer:profiles!clothes_designer_id_fkey(
+          id,
+          phasion_name,
+          full_name,
+          avatar_url,
+          location,
+          bio,
+          social_links
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
   async createCloth(clothData: any) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/create-cloth`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify(clothData),
-    });
+    const { data, error } = await supabase
+      .from('clothes')
+      .insert({
+        designer_id: user.id,
+        name: clothData.name,
+        description: clothData.description,
+        price: parseFloat(clothData.price),
+        category: clothData.category,
+        size: clothData.size,
+        color: clothData.color,
+        material: clothData.material,
+        measurements: clothData.measurements,
+        images: clothData.images || [],
+        is_available: true
+      })
+      .select()
+      .single();
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create cloth');
-    }
-
-    return response.json();
+    if (error) throw error;
+    return data;
   },
 
-  async getClothes(filters?: { category?: string; ownerName?: string }) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
+  async updateCloth(id: string, clothData: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-    const params = new URLSearchParams();
-    if (filters?.category) params.append('category', filters.category);
-    if (filters?.ownerName) params.append('ownerName', filters.ownerName);
+    const { data, error } = await supabase
+      .from('clothes')
+      .update(clothData)
+      .eq('id', id)
+      .eq('designer_id', user.id)
+      .select()
+      .single();
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/get-clothes?${params}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch clothes');
-    }
-
-    return response.json();
+    if (error) throw error;
+    return data;
   },
 
-  async updateCloth(clothId: string, clothData: any) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
+  async deleteCloth(id: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
 
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/update-cloth`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ id: clothId, ...clothData }),
-    });
+    const { error } = await supabase
+      .from('clothes')
+      .delete()
+      .eq('id', id)
+      .eq('designer_id', user.id);
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update cloth');
-    }
-
-    return response.json();
-  },
-
-  async deleteCloth(clothId: string) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-cloth?id=${clothId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete cloth');
-    }
-
-    return response.json();
-  },
-
-  // Escrow API
-  async createEscrow(escrowData: any) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/create-escrow`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify(escrowData),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create escrow');
-    }
-
-    return response.json();
-  },
-
-  async lockEscrow(escrowId: string, transactionHash: string) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/lock-escrow`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ escrowId, transactionHash }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to lock escrow');
-    }
-
-    return response.json();
+    if (error) throw error;
+    return { success: true };
   },
 
   // Designers API
   async getDesigners(filters?: { specialty?: string; location?: string }) {
-    try {
-      // Get designers from users table with their clothes count
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select(`
-          id,
-          email,
-          phasion_name,
-          name,
-          role,
-          photo,
-          created_at,
-          clothes:clothes(count)
-        `)
-        .eq('role', 'designer')
-        .order('created_at', { ascending: false });
+    let query = supabase
+      .from('profiles')
+      .select(`
+        *,
+        clothes:clothes(count)
+      `)
+      .eq('role', 'designer')
+      .order('created_at', { ascending: false });
 
-      if (usersError) {
-        console.error('Users query error:', usersError);
-        throw usersError;
-      }
-
-      console.log('Users data:', users);
-
-      // Transform users to designers format
-      const designers = users.map(user => ({
-        id: user.id,
-        name: user.phasion_name || user.name || user.email?.split('@')[0] || 'Designer',
-        email: user.email,
-        specialty: 'Fashion Design', // Default specialty
-        rating: 4.5 + Math.random() * 0.5,
-        reviews: Math.floor(Math.random() * 100) + 20,
-        location: 'Global',
-        avatar: user.photo || '/api/placeholder/60/60',
-        verified: true,
-        priceRange: '$100 - $500',
-        description: 'Talented fashion designer creating unique pieces.',
-        clothesCount: user.clothes?.[0]?.count || 0,
-        joinDate: new Date(user.created_at).toLocaleDateString()
-      }));
-
-      // If no designers found, show some sample data
-      let finalDesigners = designers;
-      if (designers.length === 0) {
-        console.log('No designers found, showing sample data');
-        finalDesigners = [
-          {
-            id: 'sample-1',
-            name: 'Sample Designer',
-            email: 'designer@example.com',
-            specialty: 'Fashion Design',
-            rating: 4.5,
-            reviews: 25,
-            location: 'Global',
-            avatar: '/api/placeholder/60/60',
-            verified: true,
-            priceRange: '$100 - $500',
-            description: 'Talented fashion designer creating unique pieces.',
-            clothesCount: 0,
-            joinDate: new Date().toLocaleDateString()
-          }
-        ];
-      }
-
-      // Apply filters if provided
-      let filteredDesigners = finalDesigners;
-      if (filters?.specialty) {
-        filteredDesigners = filteredDesigners.filter(d => 
-          d.specialty.toLowerCase().includes(filters.specialty.toLowerCase())
-        );
-      }
-      if (filters?.location) {
-        filteredDesigners = filteredDesigners.filter(d => 
-          d.location.toLowerCase().includes(filters.location.toLowerCase())
-        );
-      }
-
-      console.log('Final designers:', filteredDesigners);
-      return { designers: filteredDesigners };
-    } catch (error) {
-      console.error('Error fetching designers:', error);
-      throw error;
+    if (filters?.location) {
+      query = query.ilike('location', `%${filters.location}%`);
     }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Transform data to include clothes count
+    const designers = data?.map(designer => ({
+      ...designer,
+      clothesCount: designer.clothes?.[0]?.count || 0
+    })) || [];
+
+    return { designers };
   },
 
-  // User profile
-  async getUserProfile() {
+  async getDesignerById(id: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        clothes:clothes(*)
+      `)
+      .eq('id', id)
+      .eq('role', 'designer')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  // Favorites API
+  async getFavorites() {
     const { data: { user } } = await supabase.auth.getUser();
-    return user;
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .select(`
+        *,
+        cloth:clothes(
+          *,
+          designer:profiles!clothes_designer_id_fkey(
+            id,
+            phasion_name,
+            full_name,
+            avatar_url
+          )
+        )
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { favorites: data || [] };
   },
 
-  async updateUserProfile(updates: any) {
-    const { data, error } = await supabase.auth.updateUser({
-      data: updates
-    });
-    
+  async addToFavorites(clothId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .insert({
+        user_id: user.id,
+        cloth_id: clothId
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async removeFromFavorites(clothId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('favorites')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('cloth_id', clothId);
+
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Reviews API
+  async getReviews(clothId: string) {
+    const { data, error } = await supabase
+      .from('reviews')
+      .select(`
+        *,
+        customer:profiles!reviews_customer_id_fkey(
+          id,
+          phasion_name,
+          full_name,
+          avatar_url
+        )
+      `)
+      .eq('cloth_id', clothId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { reviews: data || [] };
+  },
+
+  async createReview(reviewData: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase
+      .from('reviews')
+      .insert({
+        cloth_id: reviewData.clothId,
+        customer_id: user.id,
+        designer_id: reviewData.designerId,
+        rating: reviewData.rating,
+        comment: reviewData.comment
+      })
+      .select()
+      .single();
+
     if (error) throw error;
     return data;
   }
 };
+

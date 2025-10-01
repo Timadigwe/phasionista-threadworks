@@ -20,7 +20,7 @@ export const MyClothes = () => {
         setIsLoading(true);
         const response = await supabaseApi.getClothes();
         // Filter clothes to show only user's clothes
-        const myClothes = response.clothes.filter((cloth: any) => cloth.owner_id === user?.id);
+        const myClothes = response.clothes.filter((cloth: any) => cloth.designer_id === user?.id);
         setClothes(myClothes);
       } catch (error: any) {
         console.error('Error loading my clothes:', error);

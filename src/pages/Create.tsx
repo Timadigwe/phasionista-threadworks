@@ -140,16 +140,21 @@ export const Create = () => {
         size: formData.size,
         color: formData.color,
         measurements: formData.measurements,
-        ownerName: user.user_metadata?.phasion_name || user.email?.split('@')[0] || 'Designer',
-        imageUrl: imageUrl
+        images: uploadedImages.length > 0 ? uploadedImages : [imageUrl],
+        material: 'Cotton' // Default material, can be made configurable later
       };
 
       console.log('Creating cloth with data:', clothData);
+      console.log('User ID:', user.id);
+      console.log('User role:', user.user_metadata?.role);
       
       const response = await supabaseApi.createCloth(clothData);
       
       toast.success('Item created successfully!');
-      console.log('Cloth created:', response);
+      console.log('Cloth created successfully:', response);
+      
+      // Navigate to clothes gallery to see the created item
+      navigate('/clothes');
       
       // Reset form
       setFormData({

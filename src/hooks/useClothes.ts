@@ -3,7 +3,6 @@ import { supabaseApi } from '@/services/supabaseApi';
 
 interface ClothesFilters {
   category?: string;
-  ownerName?: string;
   search?: string;
   priceMin?: number;
   priceMax?: number;
@@ -18,7 +17,9 @@ export const useClothes = (filters?: ClothesFilters) => {
     try {
       setIsLoading(true);
       setError(null);
+      console.log('Fetching clothes with filters:', filters);
       const response = await supabaseApi.getClothes(filters);
+      console.log('Clothes API response:', response);
       setClothes(response.clothes || []);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch clothes');

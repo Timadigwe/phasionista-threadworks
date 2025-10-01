@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { 
   ShoppingBag, 
   Heart, 
@@ -9,7 +10,8 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  ArrowLeft
+  ArrowLeft,
+  LogOut
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const stats = [
   {
@@ -98,7 +101,27 @@ const quickActions = [
 ];
 
 export const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    console.log('Dashboard: Starting logout process...');
+    try {
+      setIsLoggingOut(true);
+      console.log('Dashboard: Set loading state to true');
+      
+      console.log('Dashboard: Calling logout function...');
+      await logout();
+      console.log('Dashboard: Logout completed successfully');
+      toast.success('Successfully signed out');
+    } catch (error: any) {
+      console.error('Dashboard: Logout error:', error);
+      toast.error('Failed to sign out. Please try again.');
+    } finally {
+      console.log('Dashboard: Setting loading state to false');
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -117,6 +140,16 @@ export const Dashboard = () => {
                     <ArrowLeft className="h-4 w-4" />
                     Back to Home
                   </Link>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="hover:bg-destructive hover:text-destructive-foreground hover:border-destructive"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {isLoggingOut ? 'Signing out...' : 'Sign Out'}
                 </Button>
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">

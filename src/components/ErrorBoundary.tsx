@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,17 @@ interface State {
   hasError: boolean;
   error?: Error;
 }
+
+// Wrapper component that resets ErrorBoundary on route changes
+const ErrorBoundaryWrapper: React.FC<Props> = ({ children, fallback }) => {
+  const location = useLocation();
+  
+  return (
+    <ErrorBoundary key={location.pathname} fallback={fallback}>
+      {children}
+    </ErrorBoundary>
+  );
+};
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
@@ -79,3 +91,6 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+// Export the wrapper as the default export
+export default ErrorBoundaryWrapper;
