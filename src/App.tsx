@@ -16,6 +16,7 @@ import { Signup } from "./pages/auth/Signup";
 import { EmailVerification } from "./pages/auth/EmailVerification";
 import { ClothesGallery } from "./pages/ClothesGallery";
 import { Designers } from "./pages/Designers";
+import { DesignerProfile } from "./pages/DesignerProfile";
 import { HowItWorks } from "./pages/HowItWorks";
 
 // Protected pages
@@ -26,6 +27,7 @@ import { MyClothes } from "./pages/MyClothes";
 import { Create } from "./pages/Create";
 import { EditCloth } from "./pages/EditCloth";
 import { Profile } from "./pages/Profile";
+import { Order } from "./pages/Order";
 
 // Admin pages
 import { Admin } from "./pages/Admin";
@@ -66,6 +68,11 @@ const App = () => (
                     <Layout><Designers /></Layout>
                   </ProtectedRoute>
                 } />
+                <Route path="/designer/:id" element={
+                  <ProtectedRoute>
+                    <Layout><DesignerProfile /></Layout>
+                  </ProtectedRoute>
+                } />
                 <Route path="/dashboard" element={
                   <ProtectedRoute>
                     <Layout><Dashboard /></Layout>
@@ -99,6 +106,11 @@ const App = () => (
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <Layout><Profile /></Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/order/:id" element={
+                  <ProtectedRoute>
+                    <Layout><Order /></Layout>
                   </ProtectedRoute>
                 } />
                 

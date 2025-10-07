@@ -178,8 +178,10 @@ export const Designers = () => {
                     
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-primary">{designer.clothesCount || 0} items</span>
-                      <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        View Profile
+                      <Button size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity" asChild>
+                        <Link to={`/designer/${designer.id}`}>
+                          View Profile
+                        </Link>
                       </Button>
                     </div>
                   </CardContent>

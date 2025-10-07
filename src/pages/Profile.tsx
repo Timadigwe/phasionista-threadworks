@@ -88,23 +88,28 @@ export const Profile = () => {
       setIsUploadingImage(true);
       
       // Convert image to base64 for now (in production, you'd upload to a storage service)
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string;
-        
-        // Update profile with new avatar URL
-        await updateProfile({ avatar_url: base64 });
-        
-        // Clear selection
-        setSelectedImage(null);
-        setPreviewImage(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        
-        toast.success('Profile image updated successfully!');
-      };
-      reader.readAsDataURL(selectedImage);
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve(e.target?.result as string);
+        };
+        reader.onerror = () => {
+          reject(new Error('Failed to read image file'));
+        };
+        reader.readAsDataURL(selectedImage);
+      });
+      
+      // Update profile with new avatar URL
+      await updateProfile({ avatar_url: base64 });
+      
+      // Clear selection
+      setSelectedImage(null);
+      setPreviewImage(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+      toast.success('Profile image updated successfully!');
       
     } catch (error: any) {
       console.error('Error uploading image:', error);
@@ -203,11 +208,11 @@ export const Profile = () => {
                       </Avatar>
                       
                       {/* Image upload overlay */}
-                      <div className="absolute -bottom-2 -right-2">
+                      <div className="absolute -bottom-2 -right-2 z-10">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 w-8 rounded-full p-0"
+                          className="h-8 w-8 rounded-full p-0 bg-white hover:bg-gray-50 border-2 border-gray-200 hover:border-gray-300"
                           onClick={() => fileInputRef.current?.click()}
                         >
                           <Camera className="h-4 w-4" />
@@ -216,7 +221,9 @@ export const Profile = () => {
                     </div>
                     
                     <h3 className="text-xl font-semibold">{profile.phasion_name}</h3>
-                    <p className="text-muted-foreground">{profile.email}</p>
+                    <p className="text-muted-foreground break-all text-sm max-w-full overflow-hidden">
+                      {profile.email}
+                    </p>
                     <Badge variant={profile.role === 'designer' ? 'default' : 'secondary'} className="mt-2">
                       {profile.role}
                     </Badge>
@@ -232,15 +239,39 @@ export const Profile = () => {
                     
                     {/* Image upload controls */}
                     {selectedImage && (
-                      <div className="mt-4 space-y-2">
+                      <div className={`mt-4 space-y-3 p-3 rounded-lg border transition-colors ${
+                        isUploadingImage 
+                          ? 'bg-blue-50 border-blue-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
                         <div className="text-sm text-muted-foreground">
-                          Selected: {selectedImage.name}
+                          {isUploadingImage ? (
+                            <span className="flex items-center gap-2">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                              Uploading: {selectedImage.name}
+                            </span>
+                          ) : (
+                            `Selected: ${selectedImage.name}`
+                          )}
                         </div>
+                        
+                        {/* Image preview */}
+                        {previewImage && (
+                          <div className="flex justify-center">
+                            <img 
+                              src={previewImage} 
+                              alt="Preview" 
+                              className="w-20 h-20 object-cover rounded-lg border"
+                            />
+                          </div>
+                        )}
+                        
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             onClick={handleImageUpload}
                             disabled={isUploadingImage}
+                            className="flex-1"
                           >
                             {isUploadingImage ? (
                               <>
@@ -258,6 +289,7 @@ export const Profile = () => {
                             size="sm"
                             variant="outline"
                             onClick={handleRemoveImage}
+                            className="flex-1"
                           >
                             <X className="h-4 w-4 mr-2" />
                             Cancel
@@ -270,21 +302,30 @@ export const Profile = () => {
                   {profile.bio && (
                     <div>
                       <h4 className="font-medium mb-2">Bio</h4>
-                      <p className="text-sm text-muted-foreground">{profile.bio}</p>
+                      <p className="text-sm text-muted-foreground break-words max-w-full overflow-hidden">
+                        {profile.bio}
+                      </p>
                     </div>
                   )}
                   
                   {profile.location && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      {profile.location}
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                      <span className="break-words max-w-full overflow-hidden">
+                        {profile.location}
+                      </span>
                     </div>
                   )}
                   
                   {profile.website && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Globe className="h-4 w-4" />
-                      <a href={profile.website} target="_blank" rel="noopener noreferrer" className="hover:text-primary">
+                      <Globe className="h-4 w-4 flex-shrink-0" />
+                      <a 
+                        href={profile.website} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="hover:text-primary break-all max-w-full overflow-hidden"
+                      >
                         {profile.website}
                       </a>
                     </div>
@@ -292,8 +333,8 @@ export const Profile = () => {
                   
                   {profile.solana_wallet && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Wallet className="h-4 w-4" />
-                      <span className="font-mono text-xs">
+                      <Wallet className="h-4 w-4 flex-shrink-0" />
+                      <span className="font-mono text-xs break-all max-w-full overflow-hidden">
                         {profile.solana_wallet.slice(0, 8)}...{profile.solana_wallet.slice(-8)}
                       </span>
                     </div>

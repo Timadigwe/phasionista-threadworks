@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Heart, ShoppingBag, Star, Eye, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,31 @@ export const ClothCard = ({
   const { user } = useAuth();
   const navigate = useNavigate();
   const isOwner = user?.id === ownerId;
+  const [isFavoriting, setIsFavoriting] = useState(false);
+
+  const handleFavorite = async () => {
+    if (!user) {
+      toast.error('Please log in to add favorites');
+      return;
+    }
+
+    try {
+      setIsFavoriting(true);
+      if (isFavorited) {
+        await supabaseApi.removeFromFavorites(id);
+        toast.success('Removed from favorites');
+      } else {
+        await supabaseApi.addToFavorites(id);
+        toast.success('Added to favorites');
+      }
+      onFavorite?.(id);
+    } catch (error: any) {
+      console.error('Error handling favorite:', error);
+      toast.error(`Failed to ${isFavorited ? 'remove from' : 'add to'} favorites: ${error.message}`);
+    } finally {
+      setIsFavoriting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
@@ -96,7 +122,8 @@ export const ClothCard = ({
                   size="sm"
                   variant="secondary"
                   className="h-8 w-8 p-0 rounded-full shadow-medium"
-                  onClick={() => onFavorite?.(id)}
+                  onClick={handleFavorite}
+                  disabled={isFavoriting}
                 >
                   <Heart 
                     className={`h-4 w-4 ${isFavorited ? 'fill-destructive text-destructive' : ''}`}
@@ -152,10 +179,10 @@ export const ClothCard = ({
               size="sm"
               className="w-full btn-hero"
               disabled={!isAvailable}
-              onClick={() => onAddToCart?.(id)}
+              onClick={() => navigate(`/order/${id}`)}
             >
               <ShoppingBag className="h-4 w-4 mr-2" />
-              {isAvailable ? 'Add to Cart' : 'Unavailable'}
+              {isAvailable ? 'Order Now' : 'Unavailable'}
             </Button>
           </div>
         </div>
@@ -211,7 +238,7 @@ export const ClothCard = ({
                 size="sm"
                 variant="ghost"
                 className="h-8 w-8 p-0 hover:bg-primary hover:text-primary-foreground"
-                onClick={() => onAddToCart?.(id)}
+                onClick={() => navigate(`/order/${id}`)}
               >
                 <ShoppingBag className="h-4 w-4" />
               </Button>

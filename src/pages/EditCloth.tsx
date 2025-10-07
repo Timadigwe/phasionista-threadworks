@@ -25,7 +25,8 @@ export const EditCloth = () => {
     size: '',
     color: '',
     measurements: '',
-    imageUrl: ''
+    imageUrl: '',
+    material: ''
   });
   
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -34,20 +35,17 @@ export const EditCloth = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const categories = [
-    'Evening Wear',
-    'Casual',
-    'Business',
-    'Streetwear',
-    'Bridal',
-    'Outerwear',
-    'Accessories'
+    "Evening Wear",
+    "Business",
+    "Casual", 
+    "Streetwear",
+    "Bridal",
+    "Sports",
+    "Vintage"
   ];
 
-  const sizes = [
-    'XS', 'S', 'M', 'L', 'XL', 'XXL',
-    '28', '30', '32', '34', '36', '38', '40', '42', '44',
-    '6', '8', '10', '12', '14', '16', '18', '20'
-  ];
+  const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
+  const colors = ["Black", "White", "Red", "Blue", "Green", "Yellow", "Pink", "Purple", "Brown", "Gray"];
 
   // Load existing cloth data
   useEffect(() => {
@@ -68,7 +66,8 @@ export const EditCloth = () => {
             size: cloth.size || '',
             color: cloth.color || '',
             measurements: cloth.measurements || '',
-            imageUrl: cloth.images?.[0] || ''
+            imageUrl: cloth.images?.[0] || '',
+            material: cloth.material || ''
           });
           // Only set uploadedImages if there are actual uploaded images (base64 data)
           // Otherwise, keep it empty so the imageUrl input is used
@@ -157,7 +156,8 @@ export const EditCloth = () => {
         size: formData.size,
         color: formData.color,
         measurements: formData.measurements,
-        imageUrl: imageUrl
+        images: uploadedImages.length > 0 ? uploadedImages : [imageUrl],
+        material: formData.material || 'Cotton'
       };
 
       console.log('Updating cloth with data:', clothData);
@@ -307,24 +307,91 @@ export const EditCloth = () => {
 
                     <div>
                       <Label htmlFor="color">Color *</Label>
-                      <Input
-                        id="color"
-                        placeholder="e.g., Black, Navy Blue"
-                        value={formData.color}
-                        onChange={(e) => handleInputChange('color', e.target.value)}
-                        required
-                      />
+                      <Select value={formData.color} onValueChange={(value) => handleInputChange('color', value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select color" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {colors.map((color) => (
+                            <SelectItem key={color} value={color}>
+                              {color}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
                   <div>
-                    <Label htmlFor="measurements">Measurements</Label>
+                    <Label htmlFor="material">Material</Label>
                     <Input
-                      id="measurements"
-                      placeholder="e.g., Bust: 36 inches, Waist: 28 inches, Hips: 38 inches"
-                      value={formData.measurements}
-                      onChange={(e) => handleInputChange('measurements', e.target.value)}
+                      id="material"
+                      placeholder="e.g., Cotton, Silk, Wool"
+                      value={formData.material}
+                      onChange={(e) => handleInputChange('material', e.target.value)}
                     />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="measurements">Measurements</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <Label htmlFor="chest">Chest (inches)</Label>
+                        <Input 
+                          id="chest" 
+                          type="number" 
+                          placeholder="0"
+                          value={formData.measurements.split(',')[0] || ''}
+                          onChange={(e) => {
+                            const measurements = formData.measurements.split(',');
+                            measurements[0] = e.target.value;
+                            handleInputChange('measurements', measurements.join(','));
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="waist">Waist (inches)</Label>
+                        <Input 
+                          id="waist" 
+                          type="number" 
+                          placeholder="0"
+                          value={formData.measurements.split(',')[1] || ''}
+                          onChange={(e) => {
+                            const measurements = formData.measurements.split(',');
+                            measurements[1] = e.target.value;
+                            handleInputChange('measurements', measurements.join(','));
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="hips">Hips (inches)</Label>
+                        <Input 
+                          id="hips" 
+                          type="number" 
+                          placeholder="0"
+                          value={formData.measurements.split(',')[2] || ''}
+                          onChange={(e) => {
+                            const measurements = formData.measurements.split(',');
+                            measurements[2] = e.target.value;
+                            handleInputChange('measurements', measurements.join(','));
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="length">Length (inches)</Label>
+                        <Input 
+                          id="length" 
+                          type="number" 
+                          placeholder="0"
+                          value={formData.measurements.split(',')[3] || ''}
+                          onChange={(e) => {
+                            const measurements = formData.measurements.split(',');
+                            measurements[3] = e.target.value;
+                            handleInputChange('measurements', measurements.join(','));
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

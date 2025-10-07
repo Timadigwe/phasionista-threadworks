@@ -45,7 +45,7 @@ export const MyClothes = () => {
       toast.success('Item deleted successfully!');
       // Reload clothes
       const response = await supabaseApi.getClothes();
-      const myClothes = response.clothes.filter((cloth: any) => cloth.owner_id === user?.id);
+      const myClothes = response.clothes.filter((cloth: any) => cloth.designer_id === user?.id);
       setClothes(myClothes);
     } catch (error: any) {
       console.error('Error deleting cloth:', error);
@@ -96,29 +96,29 @@ export const MyClothes = () => {
           <Card>
             <CardContent className="p-6 text-center">
               <Package className="h-8 w-8 text-primary mx-auto mb-2" />
-              <p className="text-2xl font-bold">12</p>
+              <p className="text-2xl font-bold">{clothes.length}</p>
               <p className="text-sm text-muted-foreground">Total Items</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
               <TrendingUp className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold">5</p>
-              <p className="text-sm text-muted-foreground">Active Orders</p>
+              <p className="text-2xl font-bold">{clothes.filter(item => item.is_available).length}</p>
+              <p className="text-sm text-muted-foreground">Available Items</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
               <Eye className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold">1.2K</p>
-              <p className="text-sm text-muted-foreground">Total Views</p>
+              <p className="text-2xl font-bold">{clothes.filter(item => !item.is_available).length}</p>
+              <p className="text-sm text-muted-foreground">Unavailable Items</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
               <TrendingUp className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold">$2,450</p>
-              <p className="text-sm text-muted-foreground">Total Revenue</p>
+              <p className="text-2xl font-bold">${clothes.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(0)}</p>
+              <p className="text-sm text-muted-foreground">Total Value</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -180,24 +180,20 @@ export const MyClothes = () => {
 
                     <div className="grid grid-cols-3 gap-4 text-center text-sm">
                       <div>
-                        <p className="font-semibold">{Math.floor(Math.random() * 100) + 20}</p>
-                        <p className="text-muted-foreground">Views</p>
+                        <p className="font-semibold">{item.category}</p>
+                        <p className="text-muted-foreground">Category</p>
                       </div>
                       <div>
-                        <p className="font-semibold">{Math.floor(Math.random() * 50) + 5}</p>
-                        <p className="text-muted-foreground">Likes</p>
+                        <p className="font-semibold">{item.size}</p>
+                        <p className="text-muted-foreground">Size</p>
                       </div>
                       <div>
-                        <p className="font-semibold">{Math.floor(Math.random() * 10)}</p>
-                        <p className="text-muted-foreground">Orders</p>
+                        <p className="font-semibold">{item.color}</p>
+                        <p className="text-muted-foreground">Color</p>
                       </div>
                     </div>
 
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1">
-                        <Eye className="h-4 w-4 mr-2" />
-                        View
-                      </Button>
                       <Button variant="outline" size="sm" className="flex-1" asChild>
                         <Link to={`/edit-cloth/${item.id}`}>
                           <Edit className="h-4 w-4 mr-2" />
@@ -207,10 +203,11 @@ export const MyClothes = () => {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="text-red-600 hover:text-red-700"
+                        className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
                         onClick={() => handleDelete(item.id)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
                       </Button>
                     </div>
                   </div>
