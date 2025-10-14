@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -16,9 +17,38 @@ export const ProtectedRoute = ({
 }: ProtectedRouteProps) => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
 
-  // Show loading spinner while checking authentication
-  if (isLoading) {
+  // Fetch user role from profile
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      if (!user) {
+        setRoleLoading(false);
+        return;
+      }
+
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        setUserRole(profile?.role || 'customer');
+      } catch (error) {
+        console.error('Error fetching user role:', error);
+        setUserRole('customer');
+      } finally {
+        setRoleLoading(false);
+      }
+    };
+
+    fetchUserRole();
+  }, [user]);
+
+  // Show loading spinner while checking authentication and role
+  if (isLoading || roleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -35,9 +65,7 @@ export const ProtectedRoute = ({
   }
 
   // Check role-based access
-  if (requiredRole) {
-    const userRole = user.user_metadata?.role || 'user';
-    
+  if (requiredRole && userRole) {
     if (requiredRole === 'admin' && userRole !== 'admin') {
       return <Navigate to="/dashboard" replace />;
     }

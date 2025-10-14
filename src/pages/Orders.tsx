@@ -1,103 +1,81 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Package, 
-  Clock, 
+  Truck, 
   CheckCircle, 
+  Clock, 
   AlertCircle,
-  Truck,
   Eye,
-  MessageCircle,
-  ArrowLeft
+  ArrowLeft,
+  Filter,
+  Search
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { escrowService, EscrowOrder } from "@/services/escrowService";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
-const orders = [
-  {
-    id: "ORD-001",
-    item: "Elegant Evening Dress",
-    designer: "Sarah Johnson",
-    status: "Delivered",
-    date: "2024-01-15",
-    amount: "$450",
-    image: "/api/placeholder/80/80",
-    tracking: "TRK123456789",
-    progress: 100
-  },
-  {
-    id: "ORD-002",
-    item: "Custom Suit",
-    designer: "Michael Chen",
-    status: "In Progress",
-    date: "2024-01-20",
-    amount: "$680",
-    image: "/api/placeholder/80/80",
-    tracking: "TRK987654321",
-    progress: 60
-  },
-  {
-    id: "ORD-003",
-    item: "Summer Blouse",
-    designer: "Emma Rodriguez",
-    status: "Shipped",
-    date: "2024-01-22",
-    amount: "$120",
-    image: "/api/placeholder/80/80",
-    tracking: "TRK456789123",
-    progress: 80
-  },
-  {
-    id: "ORD-004",
-    item: "Business Shirt",
-    designer: "David Kim",
-    status: "Processing",
-    date: "2024-01-25",
-    amount: "$95",
-    image: "/api/placeholder/80/80",
-    tracking: null,
-    progress: 30
-  }
-];
-
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "Delivered":
-      return <CheckCircle className="h-5 w-5 text-green-600" />;
-    case "Shipped":
-      return <Truck className="h-5 w-5 text-blue-600" />;
-    case "In Progress":
-      return <Clock className="h-5 w-5 text-yellow-600" />;
-    case "Processing":
-      return <Package className="h-5 w-5 text-orange-600" />;
-    default:
-      return <AlertCircle className="h-5 w-5 text-gray-600" />;
-  }
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "Delivered":
-      return "bg-green-100 text-green-800";
-    case "Shipped":
-      return "bg-blue-100 text-blue-800";
-    case "In Progress":
-      return "bg-yellow-100 text-yellow-800";
-    case "Processing":
-      return "bg-orange-100 text-orange-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
+const statusConfig = {
+  pending: { label: 'Pending Payment', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  paid: { label: 'Paid - Processing', color: 'bg-blue-100 text-blue-800', icon: Package },
+  shipped: { label: 'Shipped', color: 'bg-purple-100 text-purple-800', icon: Truck },
+  delivered: { label: 'Delivered', color: 'bg-green-100 text-green-800', icon: CheckCircle },
+  released: { label: 'Completed', color: 'bg-gray-100 text-gray-800', icon: CheckCircle },
+  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800', icon: AlertCircle }
 };
 
 export const Orders = () => {
-  const allOrders = orders;
-  const activeOrders = orders.filter(order => 
-    order.status === "Processing" || order.status === "In Progress" || order.status === "Shipped"
-  );
-  const completedOrders = orders.filter(order => order.status === "Delivered");
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<EscrowOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        const data = await escrowService.getCustomerOrders(user.id);
+        setOrders(data);
+      } catch (error: any) {
+        console.error('Error fetching orders:', error);
+        toast.error('Failed to load orders');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [user]);
+
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleMarkAsDelivered = async (orderId: string) => {
+    try {
+      await escrowService.updateOrderStatus(orderId, 'delivered');
+      setOrders(orders.map(order => 
+        order.id === orderId 
+          ? { ...order, status: 'delivered' as const }
+          : order
+      ));
+      toast.success('Order marked as delivered');
+    } catch (error: any) {
+      console.error('Error updating order:', error);
+      toast.error('Failed to update order status');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,210 +99,231 @@ export const Orders = () => {
               My Orders
             </h1>
             <p className="text-xl text-muted-foreground">
-              Track and manage your fashion orders
+              Track your orders and manage deliveries with buyer protection
             </p>
           </motion.div>
         </div>
       </section>
 
       <div className="container-custom py-8">
-        <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="all">All Orders ({allOrders.length})</TabsTrigger>
-            <TabsTrigger value="active">Active ({activeOrders.length})</TabsTrigger>
-            <TabsTrigger value="completed">Completed ({completedOrders.length})</TabsTrigger>
-          </TabsList>
+        {/* Filters */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search orders..."
+                className="pl-10 pr-4"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
 
-          <TabsContent value="all" className="space-y-6">
-            {allOrders.map((order, index) => (
-              <motion.div
-                key={order.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+            {/* Status Filter */}
+            <div className="flex gap-2">
+              <Button
+                variant={statusFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setStatusFilter('all')}
               >
-                <Card>
-                  <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <img 
-                        src={order.image} 
-                        alt={order.item}
-                        className="w-16 h-16 rounded-lg object-cover"
-                      />
-                      <div>
-                        <h3 className="font-semibold text-lg">{order.item}</h3>
-                        <p className="text-muted-foreground">by {order.designer}</p>
-                        <p className="text-sm text-muted-foreground">Order #{order.id}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 mb-2">
-                        {getStatusIcon(order.status)}
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
-                        </Badge>
-                      </div>
-                      <p className="text-2xl font-bold">{order.amount}</p>
-                      <p className="text-sm text-muted-foreground">{order.date}</p>
-                    </div>
-                  </div>
+                All
+              </Button>
+              {Object.keys(statusConfig).map((status) => (
+                <Button
+                  key={status}
+                  variant={statusFilter === status ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter(status)}
+                >
+                  {statusConfig[status as keyof typeof statusConfig].label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
 
-                  {order.tracking && (
-                    <div className="mt-4 p-4 bg-muted rounded-lg">
+        {/* Orders List */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading orders...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {filteredOrders.map((order, index) => {
+              const statusInfo = statusConfig[order.status];
+              const StatusIcon = statusInfo.icon;
+              
+              return (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                >
+                  <Card className="hover:shadow-lg transition-all duration-300">
+                    <CardHeader>
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">Tracking Number</p>
-                          <p className="font-mono text-sm">{order.tracking}</p>
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
+                            <Package className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg">Order #{order.id.slice(0, 8)}</CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <Button variant="outline" size="sm">
-                          Track Package
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex gap-2">
-                    <Button variant="outline" size="sm">
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <MessageCircle className="h-4 w-4 mr-2" />
-                      Contact Designer
-                    </Button>
-                    {order.status === "Delivered" && (
-                      <Button variant="outline" size="sm">
-                        Leave Review
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </TabsContent>
-
-          <TabsContent value="active" className="space-y-6">
-            {activeOrders.map((order, index) => (
-              <motion.div
-                key={order.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <img 
-                          src={order.image} 
-                          alt={order.item}
-                          className="w-16 h-16 rounded-lg object-cover"
-                        />
-                        <div>
-                          <h3 className="font-semibold text-lg">{order.item}</h3>
-                          <p className="text-muted-foreground">by {order.designer}</p>
-                          <p className="text-sm text-muted-foreground">Order #{order.id}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <div className="flex items-center gap-2 mb-2">
-                          {getStatusIcon(order.status)}
-                          <Badge className={getStatusColor(order.status)}>
-                            {order.status}
+                        <div className="flex items-center gap-3">
+                          <Badge className={`${statusInfo.color} flex items-center gap-1`}>
+                            <StatusIcon className="h-3 w-3" />
+                            {statusInfo.label}
                           </Badge>
-                        </div>
-                        <p className="text-2xl font-bold">{order.amount}</p>
-                        <p className="text-sm text-muted-foreground">{order.date}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Progress</span>
-                        <span className="text-sm text-muted-foreground">{order.progress}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="bg-primary h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${order.progress}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex gap-2">
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <MessageCircle className="h-4 w-4 mr-2" />
-                        Contact Designer
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </TabsContent>
-
-          <TabsContent value="completed" className="space-y-6">
-            {completedOrders.map((order, index) => (
-              <motion.div
-                key={order.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <img 
-                          src={order.image} 
-                          alt={order.item}
-                          className="w-16 h-16 rounded-lg object-cover"
-                        />
-                        <div>
-                          <h3 className="font-semibold text-lg">{order.item}</h3>
-                          <p className="text-muted-foreground">by {order.designer}</p>
-                          <p className="text-sm text-muted-foreground">Order #{order.id}</p>
+                          <Button size="sm" variant="outline">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </Button>
                         </div>
                       </div>
-                      
-                      <div className="text-right">
-                        <div className="flex items-center gap-2 mb-2">
-                          {getStatusIcon(order.status)}
-                          <Badge className={getStatusColor(order.status)}>
-                            {order.status}
-                          </Badge>
+                    </CardHeader>
+                    
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Order Info */}
+                        <div className="space-y-3">
+                          <h4 className="font-medium">Order Details</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Amount:</span>
+                              <span className="font-medium">{order.amount} {order.currency}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Payment:</span>
+                              <span>{order.currency}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Order ID:</span>
+                              <span className="font-mono text-xs">{order.id.slice(0, 8)}...</span>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-2xl font-bold">{order.amount}</p>
-                        <p className="text-sm text-muted-foreground">{order.date}</p>
-                      </div>
-                    </div>
 
-                    <div className="mt-4 flex gap-2">
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Leave Review
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Reorder
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </TabsContent>
-        </Tabs>
+                        {/* Delivery Info */}
+                        <div className="space-y-3">
+                          <h4 className="font-medium">Delivery</h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Address:</span>
+                              <p className="text-xs mt-1 break-words">{order.delivery_address}</p>
+                            </div>
+                            {order.special_instructions && (
+                              <div>
+                                <span className="text-muted-foreground">Instructions:</span>
+                                <p className="text-xs mt-1">{order.special_instructions}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="space-y-3">
+                          <h4 className="font-medium">Actions</h4>
+                          <div className="space-y-2">
+                            {order.status === 'delivered' && (
+                              <Button
+                                size="sm"
+                                className="w-full"
+                                onClick={() => handleMarkAsDelivered(order.id)}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Mark as Delivered
+                              </Button>
+                            )}
+                            {order.status === 'paid' && (
+                              <p className="text-xs text-muted-foreground">
+                                Waiting for designer to ship your order
+                              </p>
+                            )}
+                            {order.status === 'shipped' && (
+                              <p className="text-xs text-muted-foreground">
+                                Your order is on the way
+                              </p>
+                            )}
+                            {order.status === 'released' && (
+                              <p className="text-xs text-green-600">
+                                Payment released to designer
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Transaction Info */}
+                      {(order.vault_transaction || order.release_transaction) && (
+                        <div className="mt-4 pt-4 border-t">
+                          <h4 className="font-medium text-sm mb-2">Transaction Details</h4>
+                          <div className="space-y-1 text-xs">
+                            {order.vault_transaction && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Payment TX:</span>
+                                <span className="font-mono">{order.vault_transaction.slice(0, 16)}...</span>
+                              </div>
+                            )}
+                            {order.release_transaction && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Release TX:</span>
+                                <span className="font-mono">{order.release_transaction.slice(0, 16)}...</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoading && filteredOrders.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-20"
+          >
+            <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              {orders.length === 0 ? 'No orders yet' : 'No orders match your filters'}
+            </h3>
+            <p className="text-muted-foreground mb-6">
+              {orders.length === 0 
+                ? 'Start shopping to see your orders here'
+                : 'Try adjusting your search or filter criteria'
+              }
+            </p>
+            <div className="flex gap-3 justify-center">
+              {orders.length === 0 ? (
+                <Button asChild>
+                  <Link to="/clothes">Browse Clothes</Link>
+                </Button>
+              ) : (
+                <Button onClick={() => { setSearchQuery(''); setStatusFilter('all'); }}>
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );

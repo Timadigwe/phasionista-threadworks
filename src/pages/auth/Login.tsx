@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 
-export const Login = () => {
+const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -31,7 +32,19 @@ export const Login = () => {
         try {
           await login(formData.email, formData.password);
           toast.success("Welcome back!");
-          navigate("/clothes");
+          
+          // Check if user is admin and redirect accordingly
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('email', formData.email)
+            .single();
+            
+          if (profile?.role === 'admin') {
+            navigate("/admin");
+          } else {
+            navigate("/clothes");
+          }
         } catch (error: any) {
           console.error("Login failed:", error);
           setError(error.message || "Login failed. Please try again.");
@@ -163,3 +176,5 @@ export const Login = () => {
     </Layout>
   );
 };
+
+export { Login };

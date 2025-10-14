@@ -64,13 +64,6 @@ export const ClothCard = ({
 
     try {
       setIsFavoriting(true);
-      if (isFavorited) {
-        await supabaseApi.removeFromFavorites(id);
-        toast.success('Removed from favorites');
-      } else {
-        await supabaseApi.addToFavorites(id);
-        toast.success('Added to favorites');
-      }
       onFavorite?.(id);
     } catch (error: any) {
       console.error('Error handling favorite:', error);

@@ -15,6 +15,13 @@ interface Profile {
   website?: string;
   social_links?: Record<string, string>;
   is_verified: boolean;
+  body_measurements?: string;
+  kyc_completed?: boolean;
+  kyc_status?: 'pending' | 'approved' | 'rejected' | 'under_review';
+  kyc_documents?: Record<string, any>;
+  kyc_notes?: string;
+  kyc_verified_at?: string;
+  admin_notes?: string;
   created_at: string;
   updated_at: string;
 }

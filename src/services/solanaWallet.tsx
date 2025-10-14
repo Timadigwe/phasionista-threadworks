@@ -4,6 +4,7 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl, Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 
 // Solana Wallet Service
 const network = WalletAdapterNetwork.Devnet;
@@ -47,6 +48,25 @@ export const useSolanaWallet = () => {
     }
   };
 
+  const getUsdcBalance = async (publicKey: string): Promise<number> => {
+    try {
+      const connection = new Connection(endpoint);
+      const usdcMint = new PublicKey(import.meta.env.VITE_USDC_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+      const tokenAccount = await getAssociatedTokenAddress(usdcMint, new PublicKey(publicKey));
+      
+      try {
+        const accountInfo = await getAccount(connection, tokenAccount);
+        return parseFloat(accountInfo.amount.toString()) / 1e6; // USDC has 6 decimals
+      } catch (error) {
+        // Token account doesn't exist, return 0
+        return 0;
+      }
+    } catch (error) {
+      console.error('Error getting USDC balance:', error);
+      return 0;
+    }
+  };
+
   return {
     publicKey: publicKey?.toString() || null,
     connected,
@@ -55,5 +75,6 @@ export const useSolanaWallet = () => {
     wallet,
     validateAddress,
     getBalance,
+    getUsdcBalance,
   };
 };

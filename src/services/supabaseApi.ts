@@ -199,7 +199,13 @@ export const supabaseApi = {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Handle duplicate key constraint error
+      if (error.code === '23505') {
+        throw new Error('This item is already in your favorites');
+      }
+      throw error;
+    }
     return data;
   },
 
@@ -215,6 +221,25 @@ export const supabaseApi = {
 
     if (error) throw error;
     return { success: true };
+  },
+
+  async isFavorited(clothId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('cloth_id', clothId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
+      console.error('Error checking favorite status:', error);
+      return false;
+    }
+
+    return !!data;
   },
 
   // Reviews API

@@ -7,7 +7,9 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { SolanaWalletProvider } from "./services/solanaWallet";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ProtectedRoute, PublicRoute } from "./components/auth/ProtectedRoute";
+import { AdminRoute } from "./components/auth/AdminRoute";
 import { Layout } from "./components/layout/Layout";
+import { AdminLayout } from "./components/layout/AdminLayout";
 
 // Public pages
 import { Home } from "./pages/Home";
@@ -28,11 +30,14 @@ import { Create } from "./pages/Create";
 import { EditCloth } from "./pages/EditCloth";
 import { Profile } from "./pages/Profile";
 import { Order } from "./pages/Order";
+import { Measurements } from "./pages/Measurements";
+import { DeliveryConfirmation } from "./pages/DeliveryConfirmation";
 
 // Admin pages
 import { Admin } from "./pages/Admin";
 import { Users } from "./pages/Users";
 import { Transactions } from "./pages/Transactions";
+import { Analytics } from "./pages/Analytics";
 
 import NotFound from "./pages/NotFound";
 
@@ -113,22 +118,37 @@ const App = () => (
                     <Layout><Order /></Layout>
                   </ProtectedRoute>
                 } />
+                <Route path="/measurements" element={
+                  <ProtectedRoute>
+                    <Layout><Measurements /></Layout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/delivery-confirmation/:orderId" element={
+                  <ProtectedRoute>
+                    <Layout><DeliveryConfirmation /></Layout>
+                  </ProtectedRoute>
+                } />
                 
                 {/* Admin Routes */}
                 <Route path="/admin" element={
-                  <ProtectedRoute requiredRole="admin">
-                    <Layout><Admin /></Layout>
-                  </ProtectedRoute>
+                  <AdminRoute>
+                    <AdminLayout><Admin /></AdminLayout>
+                  </AdminRoute>
                 } />
                 <Route path="/users" element={
-                  <ProtectedRoute requiredRole="admin">
-                    <Layout><Users /></Layout>
-                  </ProtectedRoute>
+                  <AdminRoute>
+                    <AdminLayout><Users /></AdminLayout>
+                  </AdminRoute>
                 } />
                 <Route path="/transactions" element={
-                  <ProtectedRoute requiredRole="admin">
-                    <Layout><Transactions /></Layout>
-                  </ProtectedRoute>
+                  <AdminRoute>
+                    <AdminLayout><Transactions /></AdminLayout>
+                  </AdminRoute>
+                } />
+                <Route path="/analytics" element={
+                  <AdminRoute>
+                    <AdminLayout><Analytics /></AdminLayout>
+                  </AdminRoute>
                 } />
                 
                 {/* 404 Route */}

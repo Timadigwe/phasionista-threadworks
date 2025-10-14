@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Search, Filter, Grid, List, SlidersHorizontal, ArrowLeft, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useClothes } from "@/hooks/useClothes";
+import { useFavorites } from "@/hooks/useFavorites";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export const ClothesGallery = () => {
 
   // Use custom hook for data fetching
   const { clothes: allClothes, isLoading, error } = useClothes();
+  const { isFavorited, addToFavorites, removeFromFavorites } = useFavorites();
 
   // Check if user is a designer
   const isDesigner = user?.user_metadata?.role === 'designer';
@@ -408,6 +410,24 @@ export const ClothesGallery = () => {
                   >
                     <ClothCard 
                       {...cloth}
+                      isFavorited={isFavorited(cloth.id)}
+                      onFavorite={async (clothId) => {
+                        try {
+                          if (isFavorited(clothId)) {
+                            await removeFromFavorites(clothId);
+                            toast.success('Removed from favorites');
+                          } else {
+                            await addToFavorites(clothId);
+                            toast.success('Added to favorites');
+                          }
+                        } catch (error: any) {
+                          if (error.message.includes('already in your favorites')) {
+                            toast.info('This item is already in your favorites');
+                          } else {
+                            toast.error(`Failed to ${isFavorited(clothId) ? 'remove from' : 'add to'} favorites: ${error.message}`);
+                          }
+                        }
+                      }}
                       className={viewMode === "list" ? "flex" : ""}
                     />
                   </motion.div>

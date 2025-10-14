@@ -1,100 +1,348 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, 
   ShoppingBag, 
   DollarSign, 
-  TrendingUp,
   AlertTriangle,
   CheckCircle,
   Clock,
+  TrendingUp,
   BarChart3,
-  ArrowLeft
+  Shield,
+  FileText,
+  Settings,
+  Eye,
+  UserCheck,
+  UserX,
+  Package,
+  CreditCard,
+  MessageSquare,
+  Flag,
+  Calendar,
+  Download,
+  Filter,
+  Search,
+  MoreHorizontal
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
+import { Layout } from "@/components/layout/Layout";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { exportToPDF } from "@/services/pdfExport";
 
-const stats = [
-  {
-    title: "Total Users",
-    value: "1,234",
-    change: "+12%",
-    icon: Users,
-    color: "text-blue-600"
-  },
-  {
-    title: "Total Orders",
-    value: "456",
-    change: "+8%",
-    icon: ShoppingBag,
-    color: "text-green-600"
-  },
-  {
-    title: "Revenue",
-    value: "$24,580",
-    change: "+15%",
-    icon: DollarSign,
-    color: "text-purple-600"
-  },
-  {
-    title: "Growth Rate",
-    value: "23%",
-    change: "+5%",
-    icon: TrendingUp,
-    color: "text-orange-600"
-  }
-];
+interface AdminStats {
+  totalUsers: number;
+  totalDesigners: number;
+  totalAllUsers: number;
+  totalOrders: number;
+  totalRevenue: number;
+  pendingKyc: number;
+  activeDisputes: number;
+  escrowBalance: number;
+  monthlyGrowth: number;
+}
 
-const recentActivities = [
-  {
-    id: 1,
-    type: "user_registration",
-    message: "New user registered: Sarah Johnson",
-    time: "2 minutes ago",
-    status: "success"
-  },
-  {
-    id: 2,
-    type: "order_created",
-    message: "New order #ORD-123 created",
-    time: "5 minutes ago",
-    status: "info"
-  },
-  {
-    id: 3,
-    type: "payment_received",
-    message: "Payment received: $450",
-    time: "10 minutes ago",
-    status: "success"
-  },
-  {
-    id: 4,
-    type: "issue_reported",
-    message: "Issue reported: Delivery delay",
-    time: "15 minutes ago",
-    status: "warning"
-  }
-];
+interface KycUser {
+  id: string;
+  email: string;
+  phasion_name: string;
+  full_name: string;
+  role: string;
+  kyc_status: string;
+  kyc_documents: any;
+  created_at: string;
+  is_verified: boolean;
+}
 
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "success":
-      return <CheckCircle className="h-4 w-4 text-green-600" />;
-    case "warning":
-      return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
-    case "info":
-      return <Clock className="h-4 w-4 text-blue-600" />;
-    default:
-      return <Clock className="h-4 w-4 text-gray-600" />;
-  }
-};
+interface Order {
+  id: string;
+  customer_name: string;
+  designer_name: string;
+  cloth_name: string;
+  amount: number;
+  currency: string;
+  status: string;
+  created_at: string;
+  delivery_address: string;
+  cloth?: {
+    name: string;
+  };
+  customer?: {
+    phasion_name: string;
+    full_name: string;
+  };
+  designer?: {
+    phasion_name: string;
+    full_name: string;
+  };
+}
+
+interface Dispute {
+  id: string;
+  order_id: string;
+  customer_name: string;
+  designer_name: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  resolution_notes?: string;
+  order?: {
+    customer?: {
+      phasion_name: string;
+      full_name: string;
+    };
+    designer?: {
+      phasion_name: string;
+      full_name: string;
+    };
+  };
+}
 
 export const Admin = () => {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 0,
+    totalDesigners: 0,
+    totalAllUsers: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingKyc: 0,
+    activeDisputes: 0,
+    escrowBalance: 0,
+    monthlyGrowth: 0
+  });
+  const [kycUsers, setKycUsers] = useState<KycUser[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  useEffect(() => {
+    fetchAdminData();
+  }, []);
+
+  const fetchAdminData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Fetch stats
+      const [usersResult, ordersResult, kycResult, disputesResult] = await Promise.all([
+        supabase.from('profiles').select('id, role, is_verified'),
+        supabase.from('escrow_orders').select('*'),
+        supabase.from('profiles').select('*').in('kyc_status', ['pending', 'under_review']),
+        supabase.from('disputes').select('*').eq('status', 'open')
+      ]);
+
+      // Calculate stats
+      const users = usersResult.data || [];
+      const orders = ordersResult.data || [];
+      const kycPending = kycResult.data || [];
+      const activeDisputes = disputesResult.data || [];
+
+      const totalUsers = users.filter(u => u.role === 'customer').length;
+      const totalDesigners = users.filter(u => u.role === 'designer').length;
+      const totalAllUsers = users.length; // Total users (customers + designers + admins)
+      const totalOrders = orders.length;
+      const totalRevenue = orders.reduce((sum, order) => sum + (order.amount || 0), 0);
+      const escrowBalance = orders
+        .filter(order => order.status === 'paid')
+        .reduce((sum, order) => sum + (order.amount || 0), 0);
+
+      setStats({
+        totalUsers,
+        totalDesigners,
+        totalAllUsers,
+        totalOrders,
+        totalRevenue,
+        pendingKyc: kycPending.length,
+        activeDisputes: activeDisputes.length,
+        escrowBalance,
+        monthlyGrowth: 12.5 // Mock data - would calculate from historical data
+      });
+
+      // Fetch KYC users
+      const { data: kycData } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('kyc_status', ['pending', 'under_review', 'rejected'])
+        .order('created_at', { ascending: false });
+
+      setKycUsers(kycData || []);
+
+      // Fetch recent orders
+      const { data: ordersData } = await supabase
+        .from('escrow_orders')
+        .select(`
+          *,
+          customer:profiles!escrow_orders_customer_id_fkey(phasion_name, full_name),
+          designer:profiles!escrow_orders_designer_id_fkey(phasion_name, full_name),
+          cloth:clothes!escrow_orders_cloth_id_fkey(name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      setOrders(ordersData || []);
+
+      // Fetch disputes (handle case where table doesn't exist yet)
+      try {
+        const { data: disputesData } = await supabase
+          .from('disputes')
+          .select(`
+            *,
+            order:escrow_orders!disputes_order_id_fkey(
+              customer:profiles!escrow_orders_customer_id_fkey(phasion_name, full_name),
+              designer:profiles!escrow_orders_designer_id_fkey(phasion_name, full_name)
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        setDisputes(disputesData || []);
+      } catch (disputesError: any) {
+        console.log('Disputes table not found, using empty array:', disputesError.message);
+        setDisputes([]);
+      }
+
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+      toast.error('Failed to load admin data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKycAction = async (userId: string, action: 'approve' | 'reject', notes?: string) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          kyc_status: action === 'approve' ? 'approved' : 'rejected',
+          kyc_notes: notes,
+          kyc_verified_at: new Date().toISOString()
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      toast.success(`KYC ${action}d successfully`);
+      fetchAdminData(); // Refresh data
+    } catch (error: any) {
+      console.error('Error updating KYC:', error);
+      toast.error(`Failed to ${action} KYC`);
+    }
+  };
+
+  const handleDisputeResolution = async (disputeId: string, resolution: string, decision: 'customer' | 'designer') => {
+    try {
+      const { error } = await supabase
+        .from('disputes')
+        .update({
+          status: 'resolved',
+          resolution_notes: resolution,
+          resolved_by: user?.id,
+          resolved_at: new Date().toISOString()
+        })
+        .eq('id', disputeId);
+
+      if (error) throw error;
+
+      toast.success('Dispute resolved successfully');
+      fetchAdminData(); // Refresh data
+    } catch (error: any) {
+      console.error('Error resolving dispute:', error);
+      toast.error('Failed to resolve dispute');
+    }
+  };
+
+  const handleExportReport = async () => {
+    try {
+      // Fetch all data for export
+      const [usersResult, transactionsResult] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('escrow_orders').select(`
+          *,
+          customer:profiles!escrow_orders_customer_id_fkey(phasion_name, email),
+          designer:profiles!escrow_orders_designer_id_fkey(phasion_name, email)
+        `)
+      ]);
+
+      const users = usersResult.data || [];
+      const transactions = transactionsResult.data || [];
+
+      // Transform data for export
+      const exportData = {
+        users: users.map(user => ({
+          ...user,
+          orders_count: transactions.filter(t => t.customer_id === user.id).length,
+          revenue: transactions
+            .filter(t => t.customer_id === user.id)
+            .reduce((sum, t) => sum + (t.amount || 0), 0)
+        })),
+        transactions: transactions.map(t => ({
+          id: t.id,
+          type: t.status === 'paid' ? 'payment' : 'pending',
+          amount: t.amount,
+          status: t.status,
+          date: t.created_at,
+          user: t.customer?.phasion_name || 'Unknown',
+          orderId: t.id,
+          method: t.payment_method === 'solana' ? 'Solana' : 'Stripe',
+          customer: t.customer,
+          designer: t.designer
+        })),
+        stats
+      };
+
+      await exportToPDF(exportData);
+      toast.success('Report exported successfully');
+    } catch (error: any) {
+      console.error('Error exporting report:', error);
+      toast.error('Failed to export report');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'under_review': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getOrderStatusColor = (status: string) => {
+  switch (status) {
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'shipped': return 'bg-blue-100 text-blue-800';
+      case 'delivered': return 'bg-purple-100 text-purple-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <section className="bg-gradient-to-r from-primary/10 to-secondary/10 py-12">
+      {/* Admin Dashboard Header */}
+      <section className="bg-gradient-to-r from-primary/10 to-secondary/10 py-8">
         <div className="container-custom">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -102,160 +350,317 @@ export const Admin = () => {
             className="flex items-center justify-between"
           >
             <div>
-              <div className="flex items-center gap-4 mb-4">
-                <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
-                  <Link to="/" className="flex items-center gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back to Home
-                  </Link>
-                </Button>
-              </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">
                 Admin Dashboard
               </h1>
               <p className="text-xl text-muted-foreground">
-                Manage your platform and monitor performance
+                Platform Management & Monitoring
               </p>
             </div>
-            <Button className="btn-hero">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              View Analytics
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex items-center gap-2" onClick={handleExportReport}>
+                <Download className="h-4 w-4" />
+                Export Report
+              </Button>
+              <Button className="btn-hero" asChild>
+                <Link to="/analytics">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analytics
+                </Link>
+              </Button>
+            </div>
           </motion.div>
         </div>
       </section>
 
       <div className="container-custom py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              {stats.map((stat, index) => (
+          {/* Stats Overview */}
                 <motion.div
-                  key={stat.title}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
                 >
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">
-                            {stat.title}
-                          </p>
-                          <p className="text-2xl font-bold">{stat.value}</p>
-                          <p className="text-xs text-green-600">{stat.change}</p>
+                    <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+                    <p className="text-2xl font-bold">{stats.totalAllUsers}</p>
+                  </div>
+                  <Users className="h-8 w-8 text-blue-600" />
+                </div>
+                <div className="mt-2">
+                  <Badge variant="secondary">+{stats.monthlyGrowth}% this month</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Designers</p>
+                    <p className="text-2xl font-bold">{stats.totalDesigners}</p>
+                  </div>
+                  <Shield className="h-8 w-8 text-green-600" />
+                </div>
+                <div className="mt-2">
+                  <Badge variant="secondary">Active</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
+                    <p className="text-2xl font-bold">{stats.totalOrders}</p>
+                  </div>
+                  <ShoppingBag className="h-8 w-8 text-purple-600" />
+                </div>
+                <div className="mt-2">
+                  <Badge variant="secondary">${stats.totalRevenue.toLocaleString()} revenue</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Escrow Balance</p>
+                    <p className="text-2xl font-bold">${stats.escrowBalance.toLocaleString()}</p>
+                  </div>
+                  <CreditCard className="h-8 w-8 text-orange-600" />
+                </div>
+                <div className="mt-2">
+                  <Badge variant="secondary">Protected funds</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Main Content Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="kyc">KYC Verification</TabsTrigger>
+              <TabsTrigger value="orders">Order Management</TabsTrigger>
+              <TabsTrigger value="disputes">Disputes</TabsTrigger>
+            </TabsList>
+
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Recent Orders */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Package className="h-5 w-5" />
+                      Recent Orders
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {orders.slice(0, 5).map((order) => (
+                        <div key={order.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <p className="font-medium">{order.cloth?.name || 'Unknown Item'}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {order.customer?.phasion_name || order.customer?.full_name} → {order.designer?.phasion_name || order.designer?.full_name}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge className={getOrderStatusColor(order.status)}>
+                              {order.status}
+                            </Badge>
+                            <p className="text-sm font-medium">${order.amount} {order.currency}</p>
+                          </div>
                         </div>
-                        <div className="p-3 rounded-full bg-muted">
-                          <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Pending Actions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5" />
+                      Pending Actions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <UserCheck className="h-5 w-5 text-yellow-600" />
+                          <div>
+                            <p className="font-medium">KYC Verifications</p>
+                            <p className="text-sm text-muted-foreground">{stats.pendingKyc} pending</p>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setActiveTab("kyc")}
+                        >
+                          Review
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Flag className="h-5 w-5 text-red-600" />
+                          <div>
+                            <p className="font-medium">Active Disputes</p>
+                            <p className="text-sm text-muted-foreground">{stats.activeDisputes} open</p>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setActiveTab("disputes")}
+                        >
+                          Resolve
+                        </Button>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
-              ))}
             </div>
+            </TabsContent>
 
-            {/* Recent Activities */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
+            {/* KYC Verification Tab */}
+            <TabsContent value="kyc" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
-                    Recent Activities
-                  </CardTitle>
+                  <CardTitle>KYC Verification Queue</CardTitle>
+                  <CardDescription>
+                    Review and approve user identity verification
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {recentActivities.map((activity) => (
-                      <div key={activity.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        {getStatusIcon(activity.status)}
-                        <div className="flex-1">
-                          <p className="text-sm">{activity.message}</p>
-                          <p className="text-xs text-muted-foreground">{activity.time}</p>
+                    {kycUsers.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="font-medium">{user.phasion_name}</p>
+                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                            <p className="text-sm text-muted-foreground">Role: {user.role}</p>
+                          </div>
+                          <Badge className={getStatusColor(user.kyc_status)}>
+                            {user.kyc_status}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleKycAction(user.id, 'approve')}
+                            disabled={user.kyc_status === 'approved'}
+                          >
+                            <UserCheck className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleKycAction(user.id, 'reject')}
+                            disabled={user.kyc_status === 'rejected'}
+                          >
+                            <UserX className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
-            </motion.div>
-          </div>
+            </TabsContent>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Quick Actions */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-            >
+            {/* Order Management Tab */}
+            <TabsContent value="orders" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
+                  <CardTitle>Order Management</CardTitle>
+                  <CardDescription>
+                    Monitor and manage all platform orders
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Users className="h-4 w-4 mr-2" />
-                    Manage Users
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <ShoppingBag className="h-4 w-4 mr-2" />
-                    View Orders
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <DollarSign className="h-4 w-4 mr-2" />
-                    Financial Reports
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <AlertTriangle className="h-4 w-4 mr-2" />
-                    Handle Issues
-                  </Button>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* System Status */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Status</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">API Status</span>
-                    <Badge variant="default" className="bg-green-100 text-green-800">
-                      Online
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Database</span>
-                    <Badge variant="default" className="bg-green-100 text-green-800">
-                      Healthy
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Payments</span>
-                    <Badge variant="default" className="bg-green-100 text-green-800">
-                      Active
-                    </Badge>
+                <CardContent>
+                  <div className="space-y-4">
+                    {orders.map((order) => (
+                      <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{order.cloth?.name || 'Unknown Item'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Order #{order.id.slice(0, 8)} • {new Date(order.created_at).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {order.customer?.phasion_name} → {order.designer?.phasion_name}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <Badge className={getOrderStatusColor(order.status)}>
+                            {order.status}
+                          </Badge>
+                          <p className="text-sm font-medium">${order.amount} {order.currency}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
-            </motion.div>
-          </div>
+            </TabsContent>
+
+            {/* Disputes Tab */}
+            <TabsContent value="disputes" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Dispute Resolution</CardTitle>
+                  <CardDescription>
+                    Resolve conflicts between users and designers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {disputes.map((dispute) => (
+                      <div key={dispute.id} className="p-4 border rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="font-medium">Dispute #{dispute.id.slice(0, 8)}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {dispute.order?.customer?.phasion_name} vs {dispute.order?.designer?.phasion_name}
+                            </p>
+                          </div>
+                          <Badge variant="destructive">Open</Badge>
+                        </div>
+                        <p className="text-sm mb-3">{dispute.reason}</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline">
+                            <Eye className="h-4 w-4 mr-1" />
+                            Review Details
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            <MessageSquare className="h-4 w-4 mr-1" />
+                            Resolve
+                          </Button>
+                  </div>
+                  </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Settings Tab */}
+          </Tabs>
         </div>
       </div>
-    </div>
   );
 };

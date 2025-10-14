@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Menu, X, Search, Heart, ShoppingBag, User, LogOut, Wallet } from "lucide-react";
+import { Menu, X, Search, Heart, ShoppingBag, User, LogOut, Wallet, Coins, DollarSign, Wifi, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSolanaWallet } from "@/services/solanaWallet";
+import { NotificationBell } from "@/components/NotificationBell";
 import { toast } from "sonner";
 import phasionisterLogo from "@/assets/phasionistar-logo.png";
 
@@ -21,10 +23,14 @@ interface HeaderProps {}
 
 export const Header = ({}: HeaderProps) => {
   const { user, profile, isAuthenticated, logout, fetchProfile } = useAuth();
+  const { connected, publicKey, getBalance, getUsdcBalance } = useSolanaWallet();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [solBalance, setSolBalance] = useState<number>(0);
+  const [usdcBalance, setUsdcBalance] = useState<number>(0);
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const location = useLocation();
 
   // Fetch profile when user is authenticated but profile is not loaded
@@ -34,7 +40,53 @@ export const Header = ({}: HeaderProps) => {
     }
   }, [isAuthenticated, user, profile, fetchProfile]);
 
+  // Fetch wallet balances when wallet is connected
+  useEffect(() => {
+    const fetchBalances = async () => {
+      if (connected && publicKey) {
+        setIsLoadingBalances(true);
+        try {
+          // Get SOL balance
+          const solBal = await getBalance(publicKey);
+          setSolBalance(solBal);
+          
+          // Get USDC balance
+          const usdcBal = await getUsdcBalance(publicKey);
+          setUsdcBalance(usdcBal);
+        } catch (error) {
+          console.error('Error fetching wallet balances:', error);
+        } finally {
+          setIsLoadingBalances(false);
+        }
+      } else {
+        setSolBalance(0);
+        setUsdcBalance(0);
+      }
+    };
+
+    fetchBalances();
+  }, [connected, publicKey, getBalance, getUsdcBalance]);
+
   const isActive = (path: string) => location.pathname === path;
+
+  // Refresh wallet balances
+  const refreshBalances = async () => {
+    if (connected && publicKey) {
+      setIsLoadingBalances(true);
+      try {
+        const solBal = await getBalance(publicKey);
+        const usdcBal = await getUsdcBalance(publicKey);
+        setSolBalance(solBal);
+        setUsdcBalance(usdcBal);
+        toast.success('Balances updated');
+      } catch (error) {
+        console.error('Error refreshing balances:', error);
+        toast.error('Failed to refresh balances');
+      } finally {
+        setIsLoadingBalances(false);
+      }
+    }
+  };
 
   // Get user data from profile
   const phasionName = profile?.phasion_name || user?.email?.split('@')[0] || 'User';
@@ -171,11 +223,85 @@ export const Header = ({}: HeaderProps) => {
                   </Link>
                 </Button>
 
+                {/* Notifications */}
+                {isAuthenticated && (
+                  <NotificationBell />
+                )}
+
                 {/* Wallet Status Indicator */}
-                {solanaWallet && (
-                  <Button variant="ghost" size="sm" className="text-green-600">
-                    <Wallet className="h-5 w-5" />
-                  </Button>
+                {connected && publicKey && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50">
+                        <Wallet className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-64" align="end">
+                      <div className="p-3">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Wallet className="h-4 w-4 text-green-600" />
+                            <span className="font-medium text-sm">Wallet Connected</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={refreshBalances}
+                            disabled={isLoadingBalances}
+                            className="h-6 w-6 p-0"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${isLoadingBalances ? 'animate-spin' : ''}`} />
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {/* Network Info */}
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Wifi className="h-3 w-3" />
+                            <span>Devnet</span>
+                          </div>
+                          
+                          {/* SOL Balance */}
+                          <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-4 w-4 text-yellow-500" />
+                              <span className="text-sm font-medium">SOL</span>
+                            </div>
+                            <div className="text-sm font-mono">
+                              {isLoadingBalances ? (
+                                <div className="animate-pulse bg-gray-200 h-4 w-16 rounded"></div>
+                              ) : (
+                                `${solBalance.toFixed(4)}`
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* USDC Balance */}
+                          <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-blue-500" />
+                              <span className="text-sm font-medium">USDC</span>
+                            </div>
+                            <div className="text-sm font-mono">
+                              {isLoadingBalances ? (
+                                <div className="animate-pulse bg-gray-200 h-4 w-16 rounded"></div>
+                              ) : (
+                                `${usdcBalance.toFixed(2)}`
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Wallet Address */}
+                          <div className="pt-2 border-t">
+                            <div className="text-xs text-muted-foreground mb-1">Address</div>
+                            <div className="text-xs font-mono bg-gray-100 p-2 rounded break-all">
+                              {publicKey.slice(0, 8)}...{publicKey.slice(-8)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
 
                 {/* User Profile Dropdown */}
@@ -195,10 +321,10 @@ export const Header = ({}: HeaderProps) => {
                         <p className="w-[200px] truncate text-sm text-muted-foreground">
                           {user?.email}
                         </p>
-                        {solanaWallet && (
+                        {connected && publicKey && (
                           <Badge variant="secondary" className="text-xs flex items-center gap-1 w-fit">
                             <Wallet className="h-3 w-3" />
-                            Wallet
+                            Wallet Connected
                           </Badge>
                         )}
                       </div>
