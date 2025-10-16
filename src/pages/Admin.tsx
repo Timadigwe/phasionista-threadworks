@@ -13,8 +13,6 @@ import {
   FileText,
   Settings,
   Eye,
-  UserCheck,
-  UserX,
   Package,
   CreditCard,
   MessageSquare,
@@ -38,6 +36,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { exportToPDF } from "@/services/pdfExport";
+import { escrowService } from "@/services/escrowService";
 
 interface AdminStats {
   totalUsers: number;
@@ -45,23 +44,13 @@ interface AdminStats {
   totalAllUsers: number;
   totalOrders: number;
   totalRevenue: number;
-  pendingKyc: number;
   activeDisputes: number;
   escrowBalance: number;
+  vaultBalanceSOL: number;
+  vaultBalanceUSDC: number;
   monthlyGrowth: number;
 }
 
-interface KycUser {
-  id: string;
-  email: string;
-  phasion_name: string;
-  full_name: string;
-  role: string;
-  kyc_status: string;
-  kyc_documents: any;
-  created_at: string;
-  is_verified: boolean;
-}
 
 interface Order {
   id: string;
@@ -116,12 +105,12 @@ export const Admin = () => {
     totalAllUsers: 0,
     totalOrders: 0,
     totalRevenue: 0,
-    pendingKyc: 0,
     activeDisputes: 0,
     escrowBalance: 0,
+    vaultBalanceSOL: 0,
+    vaultBalanceUSDC: 0,
     monthlyGrowth: 0
   });
-  const [kycUsers, setKycUsers] = useState<KycUser[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,24 +119,40 @@ export const Admin = () => {
 
   useEffect(() => {
     fetchAdminData();
+    fetchVaultBalances();
   }, []);
+
+  const fetchVaultBalances = async () => {
+    try {
+      const [solBalance, usdcBalance] = await Promise.all([
+        escrowService.getVaultBalance('SOL'),
+        escrowService.getVaultBalance('USDC')
+      ]);
+      
+      setStats(prev => ({
+        ...prev,
+        vaultBalanceSOL: solBalance,
+        vaultBalanceUSDC: usdcBalance
+      }));
+    } catch (error) {
+      console.error('Error fetching vault balances:', error);
+    }
+  };
 
   const fetchAdminData = async () => {
     try {
       setIsLoading(true);
       
       // Fetch stats
-      const [usersResult, ordersResult, kycResult, disputesResult] = await Promise.all([
+      const [usersResult, ordersResult, disputesResult] = await Promise.all([
         supabase.from('profiles').select('id, role, is_verified'),
         supabase.from('escrow_orders').select('*'),
-        supabase.from('profiles').select('*').in('kyc_status', ['pending', 'under_review']),
         supabase.from('disputes').select('*').eq('status', 'open')
       ]);
 
       // Calculate stats
       const users = usersResult.data || [];
       const orders = ordersResult.data || [];
-      const kycPending = kycResult.data || [];
       const activeDisputes = disputesResult.data || [];
 
       const totalUsers = users.filter(u => u.role === 'customer').length;
@@ -165,20 +170,13 @@ export const Admin = () => {
         totalAllUsers,
         totalOrders,
         totalRevenue,
-        pendingKyc: kycPending.length,
         activeDisputes: activeDisputes.length,
         escrowBalance,
+        vaultBalanceSOL: 0, // Will be updated by fetchVaultBalances
+        vaultBalanceUSDC: 0, // Will be updated by fetchVaultBalances
         monthlyGrowth: 12.5 // Mock data - would calculate from historical data
       });
 
-      // Fetch KYC users
-      const { data: kycData } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('kyc_status', ['pending', 'under_review', 'rejected'])
-        .order('created_at', { ascending: false });
-
-      setKycUsers(kycData || []);
 
       // Fetch recent orders
       const { data: ordersData } = await supabase
@@ -221,26 +219,6 @@ export const Admin = () => {
     }
   };
 
-  const handleKycAction = async (userId: string, action: 'approve' | 'reject', notes?: string) => {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          kyc_status: action === 'approve' ? 'approved' : 'rejected',
-          kyc_notes: notes,
-          kyc_verified_at: new Date().toISOString()
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
-
-      toast.success(`KYC ${action}d successfully`);
-      fetchAdminData(); // Refresh data
-    } catch (error: any) {
-      console.error('Error updating KYC:', error);
-      toast.error(`Failed to ${action} KYC`);
-    }
-  };
 
   const handleDisputeResolution = async (disputeId: string, resolution: string, decision: 'customer' | 'designer') => {
     try {
@@ -296,11 +274,16 @@ export const Admin = () => {
           date: t.created_at,
           user: t.customer?.phasion_name || 'Unknown',
           orderId: t.id,
-          method: t.payment_method === 'solana' ? 'Solana' : 'Stripe',
+          method: t.currency === 'SOL' ? 'Solana' : 'USDC',
+          currency: t.currency,
           customer: t.customer,
           designer: t.designer
         })),
-        stats
+        stats: {
+          ...stats,
+          vaultBalanceSOL: stats.vaultBalanceSOL,
+          vaultBalanceUSDC: stats.vaultBalanceUSDC
+        }
       };
 
       await exportToPDF(exportData);
@@ -311,15 +294,6 @@ export const Admin = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      case 'under_review': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
 
   const getOrderStatusColor = (status: string) => {
   switch (status) {
@@ -364,10 +338,10 @@ export const Admin = () => {
               </Button>
               <Button className="btn-hero" asChild>
                 <Link to="/analytics">
-                  <BarChart3 className="h-4 w-4 mr-2" />
+              <BarChart3 className="h-4 w-4 mr-2" />
                   Analytics
                 </Link>
-              </Button>
+            </Button>
             </div>
           </motion.div>
         </div>
@@ -430,8 +404,15 @@ export const Admin = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Escrow Balance</p>
-                    <p className="text-2xl font-bold">${stats.escrowBalance.toLocaleString()}</p>
+                    <p className="text-sm font-medium text-muted-foreground">Vault Balance</p>
+                    <div className="space-y-1">
+                      <p className="text-lg font-bold text-blue-600">
+                        {stats.vaultBalanceSOL.toFixed(4)} SOL
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {stats.vaultBalanceUSDC.toFixed(2)} USDC
+                      </p>
+                    </div>
                   </div>
                   <CreditCard className="h-8 w-8 text-orange-600" />
                 </div>
@@ -444,9 +425,8 @@ export const Admin = () => {
 
           {/* Main Content Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="kyc">KYC Verification</TabsTrigger>
               <TabsTrigger value="orders">Order Management</TabsTrigger>
               <TabsTrigger value="disputes">Disputes</TabsTrigger>
             </TabsList>
@@ -494,22 +474,6 @@ export const Admin = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <UserCheck className="h-5 w-5 text-yellow-600" />
-                          <div>
-                            <p className="font-medium">KYC Verifications</p>
-                            <p className="text-sm text-muted-foreground">{stats.pendingKyc} pending</p>
-                          </div>
-                        </div>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => setActiveTab("kyc")}
-                        >
-                          Review
-                        </Button>
-                      </div>
 
                       <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
                         <div className="flex items-center gap-3">
@@ -533,55 +497,6 @@ export const Admin = () => {
             </div>
             </TabsContent>
 
-            {/* KYC Verification Tab */}
-            <TabsContent value="kyc" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>KYC Verification Queue</CardTitle>
-                  <CardDescription>
-                    Review and approve user identity verification
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {kycUsers.map((user) => (
-                      <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="font-medium">{user.phasion_name}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
-                            <p className="text-sm text-muted-foreground">Role: {user.role}</p>
-                          </div>
-                          <Badge className={getStatusColor(user.kyc_status)}>
-                            {user.kyc_status}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleKycAction(user.id, 'approve')}
-                            disabled={user.kyc_status === 'approved'}
-                          >
-                            <UserCheck className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleKycAction(user.id, 'reject')}
-                            disabled={user.kyc_status === 'rejected'}
-                          >
-                            <UserX className="h-4 w-4 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             {/* Order Management Tab */}
             <TabsContent value="orders" className="space-y-6">
@@ -645,11 +560,11 @@ export const Admin = () => {
                           <Button size="sm" variant="outline">
                             <Eye className="h-4 w-4 mr-1" />
                             Review Details
-                          </Button>
+                  </Button>
                           <Button size="sm" variant="outline">
                             <MessageSquare className="h-4 w-4 mr-1" />
                             Resolve
-                          </Button>
+                  </Button>
                   </div>
                   </div>
                     ))}
@@ -660,7 +575,7 @@ export const Admin = () => {
 
             {/* Settings Tab */}
           </Tabs>
-        </div>
       </div>
+    </div>
   );
 };

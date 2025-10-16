@@ -38,6 +38,9 @@ export interface EscrowOrder {
   vault_balance_after?: number; // Vault balance after transaction
   delivery_address?: string;
   special_instructions?: string;
+  tracking_number?: string;
+  shipping_notes?: string;
+  shipping_photos?: string[]; // Base64 encoded photos (stored as JSONB in DB)
   created_at: string;
   updated_at: string;
 }
@@ -75,7 +78,7 @@ export const escrowService = {
     }
   },
 
-  // Create a new escrow order
+  // Create a new escrow order (only called after payment confirmation)
   async createEscrowOrder(orderData: {
     customer_id: string;
     designer_id: string;
@@ -95,15 +98,27 @@ export const escrowService = {
         currency: orderData.currency,
         delivery_address: orderData.delivery_address,
         special_instructions: orderData.special_instructions,
-        status: 'pending'
+        status: 'paid' // Order is created only after payment confirmation
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Note: Designer notification will be sent after payment confirmation
-    // This ensures the designer is only notified when funds are actually received
+    // Send notification to designer since payment is confirmed
+    try {
+      await notificationService.notifyDesignerPaymentConfirmed({
+        designer_id: orderData.designer_id,
+        order_id: data.id,
+        customer_name: 'Customer', // We could fetch this if needed
+        cloth_name: 'Order', // We could fetch this if needed
+        amount: orderData.amount,
+        currency: orderData.currency
+      });
+    } catch (notificationError) {
+      console.error('Error sending designer notification:', notificationError);
+      // Don't throw error here to avoid breaking the order creation
+    }
 
     return data;
   },
@@ -132,6 +147,46 @@ export const escrowService = {
       currency: order.currency,
       customerWallet: order.customer.solana_wallet,
       designerWallet: order.designer.solana_wallet
+    };
+  },
+
+  // Generate payment request for amount (without creating order)
+  async generatePaymentRequestForAmount(orderData: {
+    customer_id: string;
+    designer_id: string;
+    cloth_id: string;
+    amount: number;
+    currency: 'SOL' | 'USDC';
+    delivery_address?: string;
+    special_instructions?: string;
+  }): Promise<PaymentRequest> {
+    // Get customer and designer wallet addresses
+    const { data: customer, error: customerError } = await supabase
+      .from('profiles')
+      .select('solana_wallet')
+      .eq('id', orderData.customer_id)
+      .single();
+
+    if (customerError) throw customerError;
+
+    const { data: designer, error: designerError } = await supabase
+      .from('profiles')
+      .select('solana_wallet')
+      .eq('id', orderData.designer_id)
+      .single();
+
+    if (designerError) throw designerError;
+
+    if (!customer?.solana_wallet || !designer?.solana_wallet) {
+      throw new Error('Customer or designer wallet not found');
+    }
+
+    return {
+      orderId: 'pending', // Will be replaced with actual order ID after creation
+      amount: orderData.amount,
+      currency: orderData.currency,
+      customerWallet: customer.solana_wallet,
+      designerWallet: designer.solana_wallet
     };
   },
 
@@ -302,16 +357,104 @@ export const escrowService = {
   },
 
   // Update order status (for designer/admin)
-  async updateOrderStatus(orderId: string, status: EscrowOrder['status']): Promise<void> {
+  async updateOrderStatus(orderId: string, status: EscrowOrder['status'], additionalData?: any): Promise<void> {
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString()
+    };
+
+    // Add tracking information if provided
+    if (additionalData?.tracking_number) {
+      updateData.tracking_number = additionalData.tracking_number;
+    }
+    if (additionalData?.shipping_notes) {
+      updateData.shipping_notes = additionalData.shipping_notes;
+    }
+    if (additionalData?.shipping_photos) {
+      // Store shipping_photos as JSONB array in database
+      updateData.shipping_photos = JSON.stringify(additionalData.shipping_photos);
+    }
+
     const { error } = await supabase
       .from('escrow_orders')
-      .update({
-        status,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', orderId);
 
     if (error) throw error;
+
+      // Send notification to customer when order is shipped
+      if (status === 'shipped') {
+        try {
+          // Get order details to send notification
+          const orderDetails = await this.getOrder(orderId);
+          
+          // Get designer information
+          const { data: designerData, error: designerError } = await supabase
+            .from('profiles')
+            .select('phasion_name, full_name')
+            .eq('id', orderDetails.designer_id)
+            .single();
+
+          if (designerError) {
+            console.error('Error fetching designer info:', designerError);
+          } else {
+            // Send notification to customer
+            await notificationService.notifyCustomerOrderUpdate({
+              customer_id: orderDetails.customer_id,
+              order_id: orderId,
+              designer_name: designerData.full_name || designerData.phasion_name,
+              cloth_name: 'Your order', // We could get cloth name from cloth_id if needed
+              status: 'shipped',
+              message: `Your order has been shipped! ${additionalData?.tracking_number ? `Tracking number: ${additionalData.tracking_number}` : ''}`
+            });
+          }
+        } catch (notificationError) {
+          console.error('Error sending shipping notification:', notificationError);
+          // Don't throw error here to avoid breaking the order update
+        }
+      }
+
+      // Send notification to admin when delivery is confirmed
+      if (status === 'delivered') {
+        try {
+          // Get order details to send notification
+          const orderDetails = await this.getOrder(orderId);
+          
+          // Get customer and designer information
+          const { data: customerData, error: customerError } = await supabase
+            .from('profiles')
+            .select('phasion_name, full_name')
+            .eq('id', orderDetails.customer_id)
+            .single();
+
+          const { data: designerData, error: designerError } = await supabase
+            .from('profiles')
+            .select('phasion_name, full_name')
+            .eq('id', orderDetails.designer_id)
+            .single();
+
+          if (!customerError && !designerError) {
+            // Send notification to admin about delivery confirmation
+            await notificationService.createNotification({
+              user_id: 'admin', // This would need to be the actual admin user ID
+              type: 'order_delivered',
+              title: 'Order Delivered - Review Required',
+              message: `Customer ${customerData.full_name || customerData.phasion_name} confirmed delivery for order ${orderId}. Review and release payment to designer ${designerData.full_name || designerData.phasion_name}.`,
+              data: {
+                order_id: orderId,
+                customer_id: orderDetails.customer_id,
+                designer_id: orderDetails.designer_id,
+                amount: orderDetails.amount,
+                currency: orderDetails.currency
+              },
+              is_read: false
+            });
+          }
+        } catch (notificationError) {
+          console.error('Error sending admin notification:', notificationError);
+          // Don't throw error here to avoid breaking the order update
+        }
+      }
   },
 
   // Release funds to designer
@@ -337,12 +480,26 @@ export const escrowService = {
 
     const vaultPubkey = vaultKeypair.publicKey;
     const designerPubkey = new PublicKey(order.designer.solana_wallet);
+    let signature: string;
 
     try {
       if (order.currency === 'SOL') {
+        // Check vault balance first
+        const vaultBalance = await connection.getBalance(vaultPubkey);
+        console.log('Vault balance (lamports):', vaultBalance);
+        console.log('Vault balance (SOL):', vaultBalance / LAMPORTS_PER_SOL);
+        
         // Release SOL - use actual amount received if available, otherwise use expected amount
         const amountToRelease = order.actual_amount_received || order.amount;
         const lamports = Math.floor(amountToRelease * LAMPORTS_PER_SOL);
+        
+        console.log('Amount to release (SOL):', amountToRelease);
+        console.log('Amount to release (lamports):', lamports);
+        
+        // Check if vault has enough balance
+        if (vaultBalance < lamports) {
+          throw new Error(`Insufficient vault balance. Available: ${vaultBalance / LAMPORTS_PER_SOL} SOL, Required: ${amountToRelease} SOL`);
+        }
         
         const transaction = new Transaction().add(
           SystemProgram.transfer({
@@ -357,7 +514,7 @@ export const escrowService = {
         transaction.feePayer = vaultPubkey;
 
         // Sign and send transaction
-        const signature = await sendAndConfirmTransaction(
+        signature = await sendAndConfirmTransaction(
           connection,
           transaction,
           [vaultKeypair],
@@ -407,7 +564,7 @@ export const escrowService = {
         transaction.feePayer = vaultPubkey;
 
         // Sign and send transaction
-        const signature = await sendAndConfirmTransaction(
+        signature = await sendAndConfirmTransaction(
           connection,
           transaction,
           [vaultKeypair],
@@ -419,9 +576,43 @@ export const escrowService = {
           signature
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error releasing funds:', error);
-      throw new Error('Failed to release funds');
+      
+      // Enhanced error handling for Solana transaction errors
+      if (error.name === 'SendTransactionError') {
+        console.error('Transaction simulation failed:', error.message);
+        if (error.logs) {
+          console.error('Transaction logs:', error.logs);
+        }
+        throw new Error(`Transaction failed: ${error.message}. Check vault balance and try again.`);
+      } else if (error.message?.includes('Insufficient vault balance')) {
+        throw error; // Re-throw our custom error
+      } else {
+        throw new Error(`Failed to release funds: ${error.message}`);
+      }
+    } finally {
+      // Send notification to designer about payment release (after successful transaction)
+      if (signature) {
+        try {
+          await notificationService.createNotification({
+            user_id: order.designer_id,
+            type: 'payment_released' as const,
+            title: 'Payment Released',
+            message: `Your payment of ${order.amount} ${order.currency} has been released for order ${orderId}.`,
+            data: {
+              order_id: orderId,
+              amount: order.amount,
+              currency: order.currency,
+              transaction_signature: signature
+            },
+            is_read: false
+          });
+        } catch (notificationError) {
+          console.error('Error sending designer notification:', notificationError);
+          // Don't throw error here to avoid breaking the fund release
+        }
+      }
     }
   },
 
@@ -448,7 +639,14 @@ export const escrowService = {
       .single();
 
     if (error) throw error;
-    return data;
+    
+    // Parse shipping_photos from JSONB to array
+    const order = {
+      ...data,
+      shipping_photos: data.shipping_photos ? JSON.parse(data.shipping_photos) : []
+    };
+    
+    return order;
   },
 
   // Get customer orders
@@ -460,7 +658,14 @@ export const escrowService = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    
+    // Parse shipping_photos from JSONB to array
+    const orders = (data || []).map(order => ({
+      ...order,
+      shipping_photos: order.shipping_photos ? JSON.parse(order.shipping_photos) : []
+    }));
+    
+    return orders;
   },
 
   // Get designer orders
@@ -472,7 +677,14 @@ export const escrowService = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    
+    // Parse shipping_photos from JSONB to array
+    const orders = (data || []).map(order => ({
+      ...order,
+      shipping_photos: order.shipping_photos ? JSON.parse(order.shipping_photos) : []
+    }));
+    
+    return orders;
   },
 
   // Get order details for delivery confirmation
@@ -509,5 +721,59 @@ export const escrowService = {
     
     // Then confirm the fund release
     await this.confirmFundRelease(orderId, releaseResult.signature);
+  },
+
+  // Create a dispute/alarm for delivery issues
+  async createDispute(disputeData: {
+    order_id: string;
+    customer_id: string;
+    reason: string;
+    description: string;
+    status: string;
+  }): Promise<void> {
+    // First get the designer_id from the order
+    const { data: orderData, error: orderError } = await supabase
+      .from('escrow_orders')
+      .select('designer_id')
+      .eq('id', disputeData.order_id)
+      .single();
+
+    if (orderError) {
+      console.error('Error fetching order designer:', orderError);
+      throw orderError;
+    }
+
+    const { error } = await supabase
+      .from('disputes')
+      .insert({
+        order_id: disputeData.order_id,
+        customer_id: disputeData.customer_id,
+        designer_id: orderData.designer_id,
+        reason: disputeData.reason,
+        description: disputeData.description,
+        status: 'open' // Use the correct status value from the existing table
+      });
+
+    if (error) throw error;
+
+    // Send notification to admin about the dispute
+    try {
+      await notificationService.createNotification({
+        user_id: 'admin', // This would need to be the actual admin user ID
+        type: 'order_cancelled', // Using existing type for now
+        title: 'Delivery Issue Reported',
+        message: `Customer reported delivery issue for order ${disputeData.order_id}: ${disputeData.description}`,
+        data: {
+          order_id: disputeData.order_id,
+          customer_id: disputeData.customer_id,
+          reason: disputeData.reason,
+          description: disputeData.description
+        },
+        is_read: false
+      });
+    } catch (notificationError) {
+      console.error('Error sending admin notification:', notificationError);
+      // Don't throw error here to avoid breaking the dispute creation
+    }
   }
 };

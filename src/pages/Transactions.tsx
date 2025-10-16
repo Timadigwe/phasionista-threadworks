@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Filter, Download, Eye, CheckCircle, XCircle, Clock, ArrowLeft } from "lucide-react";
+import { Search, Filter, Download, Eye, CheckCircle, XCircle, Clock, ArrowLeft, DollarSign, Package } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { escrowService } from "@/services/escrowService";
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 interface Transaction {
   id: string;
@@ -41,6 +43,12 @@ const getStatusColor = (status: string) => {
       return "bg-yellow-100 text-yellow-800";
     case "processing":
       return "bg-blue-100 text-blue-800";
+    case "shipped":
+      return "bg-blue-100 text-blue-800";
+    case "delivered":
+      return "bg-orange-100 text-orange-800";
+    case "released":
+      return "bg-green-100 text-green-800";
     case "failed":
       return "bg-red-100 text-red-800";
     case "cancelled":
@@ -68,10 +76,21 @@ export const Transactions = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [vaultBalance, setVaultBalance] = useState<number>(0);
 
   useEffect(() => {
     fetchTransactions();
+    fetchVaultBalance();
   }, []);
+
+  const fetchVaultBalance = async () => {
+    try {
+      const balance = await escrowService.getVaultBalance('SOL');
+      setVaultBalance(balance);
+    } catch (error) {
+      console.error('Error fetching vault balance:', error);
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
@@ -85,9 +104,9 @@ export const Transactions = () => {
           amount,
           status,
           created_at,
-          payment_method,
           currency,
           vault_transaction,
+          release_transaction,
           customer:profiles!escrow_orders_customer_id_fkey(phasion_name, email),
           designer:profiles!escrow_orders_designer_id_fkey(phasion_name, email),
           cloth:clothes(name, price)
@@ -105,7 +124,10 @@ export const Transactions = () => {
         date: order.created_at,
         user: order.customer?.phasion_name || 'Unknown',
         orderId: order.id,
-        method: order.payment_method === 'solana' ? 'Solana' : 'Stripe',
+        method: order.currency === 'SOL' ? 'Solana' : 'USDC',
+        currency: order.currency,
+        vault_transaction: order.vault_transaction,
+        release_transaction: order.release_transaction,
         customer: order.customer,
         designer: order.designer,
         cloth: order.cloth
@@ -137,6 +159,23 @@ export const Transactions = () => {
     } catch (error: any) {
       console.error(`Error ${action}ing transaction:`, error);
       toast.error(`Failed to ${action} transaction`);
+    }
+  };
+
+  const handleReleaseFunds = async (orderId: string) => {
+    try {
+      // Release funds to designer
+      await escrowService.releaseFunds(orderId);
+      
+      // Update order status to released
+      await escrowService.updateOrderStatus(orderId, 'released');
+      
+      toast.success('Funds released to designer successfully');
+      fetchTransactions(); // Refresh data
+      fetchVaultBalance(); // Refresh vault balance
+    } catch (error: any) {
+      console.error('Error releasing funds:', error);
+      toast.error(`Failed to release funds: ${error.message}`);
     }
   };
 
@@ -199,6 +238,75 @@ export const Transactions = () => {
         </div>
       </section>
 
+      {/* Summary Cards */}
+      <div className="container-custom py-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Orders</p>
+                  <p className="text-2xl font-bold">{transactions.length}</p>
+                </div>
+                <Package className="h-8 w-8 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Ready for Release</p>
+                  <p className="text-2xl font-bold text-orange-600">
+                    {transactions.filter(t => t.status === 'delivered').length}
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Completed</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {transactions.filter(t => t.status === 'released').length}
+                  </p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Pending</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {transactions.filter(t => t.status === 'pending').length}
+                  </p>
+                </div>
+                <Clock className="h-8 w-8 text-yellow-600" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Vault Balance</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {vaultBalance.toFixed(4)} SOL
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       <div className="container-custom py-8">
         {/* Filters */}
         <Card className="mb-6">
@@ -243,6 +351,13 @@ export const Transactions = () => {
                   onClick={() => setFilterStatus("cancelled")}
                 >
                   Cancelled
+                </Button>
+                <Button
+                  variant={filterStatus === "delivered" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFilterStatus("delivered")}
+                >
+                  Ready for Release
                 </Button>
               </div>
             </div>
@@ -324,6 +439,23 @@ export const Transactions = () => {
                                 Reject
                               </Button>
                             </>
+                          )}
+                          {transaction.status === 'delivered' && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleReleaseFunds(transaction.id)}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              Release Funds
+                            </Button>
+                          )}
+                          {transaction.status === 'released' && (
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Released
+                            </Badge>
                           )}
                           <Button size="sm" variant="ghost">
                             <Eye className="h-4 w-4" />

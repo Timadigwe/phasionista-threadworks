@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,16 +11,58 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 
 export const NotificationBell = () => {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { profile } = useAuth();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleNotificationClick = async (notificationId: string, isRead: boolean) => {
+  const handleNotificationClick = async (notificationId: string, isRead: boolean, notification: any) => {
     if (!isRead) {
       await markAsRead(notificationId);
     }
+    
+    // Navigate based on notification type and user role
+    const navigateToOrder = (orderId: string) => {
+      if (profile?.role === 'designer') {
+        navigate(`/designer/orders`);
+      } else {
+        navigate(`/orders`);
+      }
+    };
+
+    const navigateToOrderDetails = (orderId: string) => {
+      if (profile?.role === 'designer') {
+        navigate(`/designer/orders`);
+      } else {
+        navigate(`/orders`);
+      }
+    };
+
+    // Handle navigation based on notification type
+    switch (notification.type) {
+      case 'order_placed':
+      case 'order_paid':
+      case 'order_shipped':
+      case 'order_delivered':
+      case 'order_cancelled':
+        if (notification.data?.order_id) {
+          navigateToOrder(notification.data.order_id);
+        }
+        break;
+      default:
+        // For other notification types, navigate to appropriate page
+        if (profile?.role === 'designer') {
+          navigate('/designer/orders');
+        } else {
+          navigate('/orders');
+        }
+    }
+    
+    setIsOpen(false);
   };
 
   const handleMarkAllAsRead = async () => {
@@ -104,7 +147,7 @@ export const NotificationBell = () => {
               <DropdownMenuItem
                 key={notification.id}
                 className="p-3 cursor-pointer"
-                onClick={() => handleNotificationClick(notification.id, notification.is_read)}
+                onClick={() => handleNotificationClick(notification.id, notification.is_read, notification)}
               >
                 <div className="flex items-start gap-3 w-full">
                   <div className="text-lg">

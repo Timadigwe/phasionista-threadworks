@@ -16,7 +16,7 @@ const supabaseService = createClient(
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'order_placed' | 'order_paid' | 'order_shipped' | 'order_delivered' | 'order_cancelled';
+  type: 'order_placed' | 'order_paid' | 'order_shipped' | 'order_delivered' | 'order_cancelled' | 'payment_released';
   title: string;
   message: string;
   data?: any;

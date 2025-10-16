@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Camera, Ruler, CheckCircle, AlertCircle, ArrowRight, ArrowLeft } from "lucide-react";
+import { Camera, Ruler, CheckCircle, AlertCircle, ArrowRight, ArrowLeft, ArrowLeft as ArrowBack, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
 
 interface BodyMeasurements {
   height: number; // cm
@@ -109,7 +110,7 @@ const measurementSteps: MeasurementStep[] = [
 ];
 
 export const Measurements = () => {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, profile, fetchProfile } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [measurements, setMeasurements] = useState<BodyMeasurements>({
@@ -124,9 +125,45 @@ export const Measurements = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [hasExistingMeasurements, setHasExistingMeasurements] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   const currentStepData = measurementSteps[currentStep];
   const progress = ((currentStep + 1) / measurementSteps.length) * 100;
+
+  // Check for existing measurements on component mount
+  useEffect(() => {
+    const loadExistingMeasurements = async () => {
+      if (user && !profile) {
+        await fetchProfile();
+      }
+      setProfileLoading(false);
+    };
+
+    loadExistingMeasurements();
+  }, [user, profile, fetchProfile]);
+
+  // Load existing measurements when profile is available
+  useEffect(() => {
+    if (profile?.body_measurements && profile.body_measurements !== '') {
+      setHasExistingMeasurements(true);
+      // Parse existing measurements from string format
+      const measurementValues = profile.body_measurements.split(',').map(val => parseFloat(val) || 0);
+      if (measurementValues.length >= 8) {
+        setMeasurements({
+          height: measurementValues[0],
+          weight: measurementValues[1],
+          chest: measurementValues[2],
+          waist: measurementValues[3],
+          hips: measurementValues[4],
+          inseam: measurementValues[5],
+          shoulder: measurementValues[6],
+          sleeve: measurementValues[7]
+        });
+      }
+    }
+  }, [profile]);
 
   const handleMeasurementChange = (value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -180,12 +217,40 @@ export const Measurements = () => {
       });
 
       toast.success('Body measurements saved successfully!');
-      navigate('/profile');
+      await fetchProfile(); // Refresh profile data
+      setHasExistingMeasurements(true);
+      setIsEditing(false);
+      navigate('/dashboard');
     } catch (error: any) {
       console.error('Error saving measurements:', error);
       toast.error('Failed to save measurements. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+    setCurrentStep(0);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    // Reset to original measurements
+    if (profile?.body_measurements && profile.body_measurements !== '') {
+      const measurementValues = profile.body_measurements.split(',').map(val => parseFloat(val) || 0);
+      if (measurementValues.length >= 8) {
+        setMeasurements({
+          height: measurementValues[0],
+          weight: measurementValues[1],
+          chest: measurementValues[2],
+          waist: measurementValues[3],
+          hips: measurementValues[4],
+          inseam: measurementValues[5],
+          shoulder: measurementValues[6],
+          sleeve: measurementValues[7]
+        });
+      }
     }
   };
 
@@ -205,8 +270,107 @@ export const Measurements = () => {
 
   const sizeRecommendation = getSizeRecommendation();
 
+  // Show loading state while profile is being fetched
+  if (profileLoading) {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="container-custom py-8">
+            <Card className="max-w-2xl mx-auto">
+              <CardContent className="p-8 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <h2 className="text-xl font-semibold mb-2">Loading Measurements...</h2>
+                <p className="text-muted-foreground">Please wait while we check your measurement status.</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Show existing measurements view (not editing)
+  if (hasExistingMeasurements && !isEditing) {
+    return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="container-custom py-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-4xl mx-auto"
+            >
+              {/* Header with Back Button */}
+              <div className="flex items-center gap-4 mb-8">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="hover:bg-muted/50">
+                  <ArrowBack className="h-4 w-4 mr-2" />
+                  Back to Dashboard
+                </Button>
+              </div>
+
+              <div className="text-center mb-8">
+                <h1 className="text-3xl md:text-4xl font-bold mb-4">
+                  Your Body Measurements
+                </h1>
+                <p className="text-xl text-muted-foreground">
+                  View and edit your saved measurements
+                </p>
+              </div>
+
+              {/* Measurements Display */}
+              <Card className="mb-8">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    Current Measurements
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {measurementSteps.map((step, index) => (
+                      <div key={step.id} className="flex justify-between items-center p-4 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{step.title}</p>
+                          <p className="text-sm text-muted-foreground">{step.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-semibold">
+                            {measurements[step.field] > 0 ? `${measurements[step.field]} ${step.unit}` : 'Not set'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {sizeRecommendation && (
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-2">Size Recommendation</h3>
+                      <p className="text-blue-700">Based on your measurements, we recommend size: <strong>{sizeRecommendation}</strong></p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4 justify-center">
+                <Button onClick={handleEdit} className="bg-primary hover:bg-primary/90">
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Edit Measurements
+                </Button>
+                <Button variant="outline" onClick={() => navigate('/dashboard')}>
+                  Back to Dashboard
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Show measurement form (new measurements or editing)
   return (
-    <Layout>
+    <>
       <div className="min-h-screen bg-gradient-to-br from-background to-muted">
         <div className="container-custom py-8">
           <motion.div
@@ -215,13 +379,21 @@ export const Measurements = () => {
             transition={{ duration: 0.5 }}
             className="max-w-4xl mx-auto"
           >
+            {/* Header with Back Button */}
+            <div className="flex items-center gap-4 mb-8">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="hover:bg-muted/50">
+                <ArrowBack className="h-4 w-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </div>
+
             {/* Header */}
             <div className="text-center mb-8">
               <h1 className="text-3xl md:text-4xl font-bold mb-4">
-                AI-Assisted Body Measurements
+                {isEditing ? 'Edit Body Measurements' : 'AI-Assisted Body Measurements'}
               </h1>
               <p className="text-xl text-muted-foreground">
-                Get accurate measurements for perfect-fitting clothes
+                {isEditing ? 'Update your measurements for better recommendations' : 'Get accurate measurements for perfect-fitting clothes'}
               </p>
             </div>
 
@@ -289,15 +461,26 @@ export const Measurements = () => {
 
                     {/* Navigation */}
                     <div className="flex justify-between pt-6">
-                      <Button
-                        variant="outline"
-                        onClick={handlePrevious}
-                        disabled={currentStep === 0}
-                        className="flex items-center gap-2"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={handlePrevious}
+                          disabled={currentStep === 0}
+                          className="flex items-center gap-2"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        {isEditing && (
+                          <Button
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                            className="flex items-center gap-2"
+                          >
+                            Cancel Edit
+                          </Button>
+                        )}
+                      </div>
 
                       {currentStep < measurementSteps.length - 1 ? (
                         <Button
@@ -317,12 +500,12 @@ export const Measurements = () => {
                           {isLoading ? (
                             <>
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              Saving...
+                              {isEditing ? 'Updating...' : 'Saving...'}
                             </>
                           ) : (
                             <>
                               <CheckCircle className="h-4 w-4" />
-                              Save Measurements
+                              {isEditing ? 'Update Measurements' : 'Save Measurements'}
                             </>
                           )}
                         </Button>
@@ -432,6 +615,6 @@ export const Measurements = () => {
           </motion.div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };

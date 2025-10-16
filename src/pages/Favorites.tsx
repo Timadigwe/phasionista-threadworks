@@ -88,7 +88,7 @@ export const Favorites = () => {
           >
             <div className="flex justify-center mb-6">
               <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
-                <Link to="/" className="flex items-center gap-2">
+                <Link to="/d" className="flex items-center gap-2">
                   <ArrowLeft className="h-4 w-4" />
                   Back to Home
                 </Link>

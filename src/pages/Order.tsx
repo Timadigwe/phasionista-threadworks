@@ -211,40 +211,48 @@ export const Order = () => {
           return;
         }
 
-        // Create escrow order
-        const escrowOrder = await escrowService.createEscrowOrder({
+        // Calculate the correct amount based on currency
+        let orderAmount: number;
+        if (formData.currency === 'SOL') {
+          // Convert USD amount to SOL using current price
+          orderAmount = (cloth.price * formData.quantity) / solPrice;
+          console.log('Order Creation - SOL Conversion:', {
+            usdPrice: cloth.price,
+            quantity: formData.quantity,
+            totalUsd: cloth.price * formData.quantity,
+            solPrice: solPrice,
+            solAmount: orderAmount,
+            currency: formData.currency
+          });
+        } else {
+          // USDC amount is the same as USD amount
+          orderAmount = cloth.price * formData.quantity;
+          console.log('Order Creation - USDC:', {
+            usdPrice: cloth.price,
+            quantity: formData.quantity,
+            usdcAmount: orderAmount,
+            currency: formData.currency
+          });
+        }
+
+        // Generate payment request first (without creating order)
+        const paymentRequest = await escrowService.generatePaymentRequestForAmount({
           customer_id: user.id,
           designer_id: cloth.designer.id,
           cloth_id: cloth.id,
-          amount: cloth.price * formData.quantity,
+          amount: orderAmount,
           currency: formData.currency,
           delivery_address: formData.deliveryAddress,
           special_instructions: formData.specialInstructions
         });
-
-        // Generate payment request
-        const paymentRequest = await escrowService.generatePaymentRequest(escrowOrder.id);
         
-        // Calculate the correct amount based on currency
-        let transactionAmount: number;
-        if (paymentRequest.currency === 'SOL') {
-          // Convert USD amount to SOL using current price
-          transactionAmount = paymentRequest.amount / solPrice;
-          console.log('SOL Payment Conversion:', {
-            usdAmount: paymentRequest.amount,
-            solPrice: solPrice,
-            solAmount: transactionAmount,
-            currency: paymentRequest.currency
-          });
-        } else {
-          // USDC amount is the same as USD amount
-          transactionAmount = paymentRequest.amount;
-          console.log('USDC Payment:', {
-            usdAmount: paymentRequest.amount,
-            usdcAmount: transactionAmount,
-            currency: paymentRequest.currency
-          });
-        }
+        // The payment request amount is already in the correct currency (SOL/USDC)
+        const transactionAmount = paymentRequest.amount;
+        console.log('Payment Request:', {
+          amount: paymentRequest.amount,
+          currency: paymentRequest.currency,
+          orderId: paymentRequest.orderId
+        });
 
         // Create transaction on client side for better wallet compatibility
         const transaction = await createSolanaTransaction(
@@ -311,6 +319,17 @@ export const Order = () => {
           }
         }
         
+        // Create order only after successful payment confirmation
+        const escrowOrder = await escrowService.createEscrowOrder({
+          customer_id: user.id,
+          designer_id: cloth.designer.id,
+          cloth_id: cloth.id,
+          amount: orderAmount,
+          currency: formData.currency,
+          delivery_address: formData.deliveryAddress,
+          special_instructions: formData.specialInstructions
+        });
+
         // Confirm payment with real signature
         await escrowService.confirmPayment(escrowOrder.id, signature);
         

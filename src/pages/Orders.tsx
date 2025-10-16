@@ -6,7 +6,6 @@ import {
   CheckCircle, 
   Clock, 
   AlertCircle,
-  Eye,
   ArrowLeft,
   Filter,
   Search
@@ -77,6 +76,44 @@ export const Orders = () => {
     }
   };
 
+  const handleConfirmDelivery = async (orderId: string) => {
+    try {
+      // First update the order status to delivered
+      await escrowService.updateOrderStatus(orderId, 'delivered');
+      
+      // Then release the funds to the designer
+      await escrowService.releaseFunds(orderId);
+      
+      setOrders(orders.map(order => 
+        order.id === orderId 
+          ? { ...order, status: 'delivered' as const }
+          : order
+      ));
+      toast.success('Delivery confirmed! Payment has been released to the designer.');
+    } catch (error: any) {
+      console.error('Error confirming delivery:', error);
+      toast.error('Failed to confirm delivery');
+    }
+  };
+
+  const handleRaiseAlarm = async (orderId: string) => {
+    try {
+      // Create a dispute/alarm record
+      await escrowService.createDispute({
+        order_id: orderId,
+        customer_id: user?.id || '',
+        reason: 'delivery_issue',
+        description: 'Customer reported delivery issue - order not received',
+        status: 'pending'
+      });
+      
+      toast.success('Issue reported to admin. We will investigate and get back to you.');
+    } catch (error: any) {
+      console.error('Error raising alarm:', error);
+      toast.error('Failed to report issue');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -89,9 +126,9 @@ export const Orders = () => {
           >
             <div className="flex justify-center mb-6">
               <Button variant="ghost" size="sm" asChild className="hover:bg-muted/50">
-                <Link to="/" className="flex items-center gap-2">
+                <Link to="/dashboard" className="flex items-center gap-2">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to Home
+                  Back to Dashboard
                 </Link>
               </Button>
             </div>
@@ -168,79 +205,93 @@ export const Orders = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
                 >
-                  <Card className="hover:shadow-lg transition-all duration-300">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
+                  <Card className="hover:shadow-xl transition-all duration-300 border-l-4 border-l-primary/20 hover:border-l-primary">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                            <Package className="h-6 w-6 text-muted-foreground" />
+                          <div className="w-14 h-14 bg-gradient-to-br from-primary/10 to-primary/20 rounded-xl flex items-center justify-center">
+                            <Package className="h-7 w-7 text-primary" />
                           </div>
-                          <div>
-                            <CardTitle className="text-lg">Order #{order.id.slice(0, 8)}</CardTitle>
+                          <div className="space-y-1">
+                            <CardTitle className="text-xl font-bold">Order #{order.id.slice(0, 8)}</CardTitle>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(order.created_at).toLocaleDateString()}
+                              {new Date(order.created_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
                             </p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{order.amount} {order.currency}</span>
+                              <span className="text-xs text-muted-foreground">•</span>
+                              <span className="text-xs text-muted-foreground">{order.currency} Payment</span>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge className={`${statusInfo.color} flex items-center gap-1`}>
-                            <StatusIcon className="h-3 w-3" />
+                          <Badge className={`${statusInfo.color} flex items-center gap-2 px-3 py-1.5 font-medium`}>
+                            <StatusIcon className="h-4 w-4" />
                             {statusInfo.label}
                           </Badge>
-                          <Button size="sm" variant="outline">
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Button>
                         </div>
                       </div>
                     </CardHeader>
                     
-                    <CardContent>
+                    <CardContent className="pt-0">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {/* Order Info */}
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Order Details</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-primary rounded-full"></div>
+                            <h4 className="font-semibold text-lg">Order Details</h4>
+                          </div>
+                          <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                            <div className="flex justify-between items-center">
                               <span className="text-muted-foreground">Amount:</span>
-                              <span className="font-medium">{order.amount} {order.currency}</span>
+                              <span className="font-bold text-lg">{order.amount} {order.currency}</span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Payment:</span>
-                              <span>{order.currency}</span>
+                            <div className="flex justify-between items-center">
+                              <span className="text-muted-foreground">Payment Method:</span>
+                              <span className="font-medium">{order.currency}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-muted-foreground">Order ID:</span>
-                              <span className="font-mono text-xs">{order.id.slice(0, 8)}...</span>
+                              <span className="font-mono text-sm bg-background px-2 py-1 rounded">{order.id.slice(0, 8)}...</span>
                             </div>
                           </div>
                         </div>
 
                         {/* Delivery Info */}
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Delivery</h4>
-                          <div className="space-y-2 text-sm">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <h4 className="font-semibold text-lg">Delivery</h4>
+                          </div>
+                          <div className="bg-green-50 rounded-lg p-4 space-y-3">
                             <div>
-                              <span className="text-muted-foreground">Address:</span>
-                              <p className="text-xs mt-1 break-words">{order.delivery_address}</p>
+                              <span className="text-sm font-medium text-green-800">Delivery Address:</span>
+                              <p className="text-sm mt-1 break-words text-green-700 bg-white/50 px-2 py-1 rounded">{order.delivery_address}</p>
                             </div>
                             {order.special_instructions && (
                               <div>
-                                <span className="text-muted-foreground">Instructions:</span>
-                                <p className="text-xs mt-1">{order.special_instructions}</p>
+                                <span className="text-sm font-medium text-green-800">Special Instructions:</span>
+                                <p className="text-sm mt-1 text-green-700 bg-white/50 px-2 py-1 rounded">{order.special_instructions}</p>
                               </div>
                             )}
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Actions</h4>
-                          <div className="space-y-2">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <h4 className="font-semibold text-lg">Status & Actions</h4>
+                          </div>
+                          <div className="bg-blue-50 rounded-lg p-4 space-y-3">
                             {order.status === 'delivered' && (
                               <Button
                                 size="sm"
-                                className="w-full"
+                                className="w-full bg-green-600 hover:bg-green-700"
                                 onClick={() => handleMarkAsDelivered(order.id)}
                               >
                                 <CheckCircle className="h-4 w-4 mr-2" />
@@ -248,19 +299,54 @@ export const Orders = () => {
                               </Button>
                             )}
                             {order.status === 'paid' && (
-                              <p className="text-xs text-muted-foreground">
-                                Waiting for designer to ship your order
-                              </p>
+                              <div className="text-center">
+                                <Clock className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                                <p className="text-sm font-medium text-blue-800">
+                                  Waiting for designer to ship your order
+                                </p>
+                              </div>
                             )}
                             {order.status === 'shipped' && (
-                              <p className="text-xs text-muted-foreground">
-                                Your order is on the way
-                              </p>
+                              <div className="space-y-3">
+                                <div className="text-center">
+                                  <Truck className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                                  <p className="text-sm font-medium text-blue-800">
+                                    Your order is on the way
+                                  </p>
+                                  {order.tracking_number && (
+                                    <p className="text-xs text-blue-600 mt-1">
+                                      Tracking: {order.tracking_number}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="flex-1 bg-green-600 hover:bg-green-700"
+                                    onClick={() => handleConfirmDelivery(order.id)}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Confirm Delivery
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="flex-1"
+                                    onClick={() => handleRaiseAlarm(order.id)}
+                                  >
+                                    <AlertCircle className="h-4 w-4 mr-2" />
+                                    Report Issue
+                                  </Button>
+                                </div>
+                              </div>
                             )}
                             {order.status === 'released' && (
-                              <p className="text-xs text-green-600">
-                                Payment released to designer
-                              </p>
+                              <div className="text-center">
+                                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                                <p className="text-sm font-medium text-green-800">
+                                  Payment released to designer
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -268,19 +354,36 @@ export const Orders = () => {
 
                       {/* Transaction Info */}
                       {(order.vault_transaction || order.release_transaction) && (
-                        <div className="mt-4 pt-4 border-t">
-                          <h4 className="font-medium text-sm mb-2">Transaction Details</h4>
-                          <div className="space-y-1 text-xs">
+                        <div className="mt-6 pt-4 border-t border-muted">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            <h4 className="font-semibold text-sm">Blockchain Transactions</h4>
+                          </div>
+                          <div className="bg-purple-50 rounded-lg p-4 space-y-3">
                             {order.vault_transaction && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Payment TX:</span>
-                                <span className="font-mono">{order.vault_transaction.slice(0, 16)}...</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-purple-800">Payment Transaction:</span>
+                                <a 
+                                  href={`https://solscan.io/tx/${order.vault_transaction}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-sm bg-white/70 px-2 py-1 rounded text-purple-600 hover:text-purple-800 hover:bg-white transition-colors"
+                                >
+                                  {order.vault_transaction.slice(0, 16)}...
+                                </a>
                               </div>
                             )}
                             {order.release_transaction && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Release TX:</span>
-                                <span className="font-mono">{order.release_transaction.slice(0, 16)}...</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-purple-800">Release Transaction:</span>
+                                <a 
+                                  href={`https://solscan.io/tx/${order.release_transaction}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-sm bg-white/70 px-2 py-1 rounded text-purple-600 hover:text-purple-800 hover:bg-white transition-colors"
+                                >
+                                  {order.release_transaction.slice(0, 16)}...
+                                </a>
                               </div>
                             )}
                           </div>

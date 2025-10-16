@@ -9,11 +9,13 @@ import {
   Settings,
   LogOut,
   Menu,
-  X
+  X,
+  Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { NotificationBell } from '@/components/NotificationBell';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -37,6 +39,12 @@ const adminNavItems = [
     href: '/transactions',
     icon: ShoppingBag,
     description: 'Order and transaction monitoring'
+  },
+  {
+    name: 'KYC Review',
+    href: '/admin/kyc-review',
+    icon: Shield,
+    description: 'Review and verify user identity documents'
   },
   {
     name: 'Analytics',
@@ -100,6 +108,7 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
 
             {/* Admin Actions */}
             <div className="flex items-center gap-3">
+              <NotificationBell />
               <Button
                 variant="outline"
                 size="sm"

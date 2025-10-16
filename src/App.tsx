@@ -8,7 +8,8 @@ import { SolanaWalletProvider } from "./services/solanaWallet";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ProtectedRoute, PublicRoute } from "./components/auth/ProtectedRoute";
 import { AdminRoute } from "./components/auth/AdminRoute";
-import { Layout } from "./components/layout/Layout";
+import { LandingLayout } from "./components/layout/LandingLayout";
+import { UserLayout } from "./components/layout/UserLayout";
 import { AdminLayout } from "./components/layout/AdminLayout";
 
 // Public pages
@@ -24,6 +25,7 @@ import { HowItWorks } from "./pages/HowItWorks";
 // Protected pages
 import { Dashboard } from "./pages/Dashboard";
 import { Orders } from "./pages/Orders";
+import { DesignerOrders } from "./pages/DesignerOrders";
 import { Favorites } from "./pages/Favorites";
 import { MyClothes } from "./pages/MyClothes";
 import { Create } from "./pages/Create";
@@ -32,12 +34,14 @@ import { Profile } from "./pages/Profile";
 import { Order } from "./pages/Order";
 import { Measurements } from "./pages/Measurements";
 import { DeliveryConfirmation } from "./pages/DeliveryConfirmation";
+import { KYCVerification } from "./pages/KYCVerification";
 
 // Admin pages
 import { Admin } from "./pages/Admin";
 import { Users } from "./pages/Users";
 import { Transactions } from "./pages/Transactions";
 import { Analytics } from "./pages/Analytics";
+import { AdminKYCReview } from "./pages/AdminKYCReview";
 
 import NotFound from "./pages/NotFound";
 
@@ -53,83 +57,105 @@ const App = () => (
           <BrowserRouter>
             <ErrorBoundary>
               <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<Layout><Home /></Layout>} />
-                <Route path="/how-it-works" element={<Layout><HowItWorks /></Layout>} />
+                {/* Landing Page Routes (Public) */}
+                <Route path="/" element={<LandingLayout><Home /></LandingLayout>} />
+                <Route path="/how-it-works" element={<LandingLayout><HowItWorks /></LandingLayout>} />
                 
-                {/* Auth Routes (redirect if authenticated) */}
-                <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-                <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
-                <Route path="/verify-email" element={<EmailVerification />} />
+                {/* Auth Routes (Public) */}
+                <Route path="/login" element={
+                  <PublicRoute>
+                    <LandingLayout><Login /></LandingLayout>
+                  </PublicRoute>
+                } />
+                <Route path="/signup" element={
+                  <PublicRoute>
+                    <LandingLayout><Signup /></LandingLayout>
+                  </PublicRoute>
+                } />
+                <Route path="/verify-email" element={
+                  <PublicRoute>
+                    <LandingLayout><EmailVerification /></LandingLayout>
+                  </PublicRoute>
+                } />
                 
-                {/* Protected Routes */}
+                {/* User Routes (Protected with UserLayout) */}
                 <Route path="/clothes" element={
                   <ProtectedRoute>
-                    <Layout><ClothesGallery /></Layout>
+                    <UserLayout><ClothesGallery /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/designers" element={
                   <ProtectedRoute>
-                    <Layout><Designers /></Layout>
+                    <UserLayout><Designers /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/designer/:id" element={
                   <ProtectedRoute>
-                    <Layout><DesignerProfile /></Layout>
+                    <UserLayout><DesignerProfile /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/dashboard" element={
                   <ProtectedRoute>
-                    <Layout><Dashboard /></Layout>
+                    <UserLayout><Dashboard /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/orders" element={
                   <ProtectedRoute>
-                    <Layout><Orders /></Layout>
+                    <UserLayout><Orders /></UserLayout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/designer/orders" element={
+                  <ProtectedRoute requiredRole="designer">
+                    <UserLayout><DesignerOrders /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/favorites" element={
                   <ProtectedRoute>
-                    <Layout><Favorites /></Layout>
+                    <UserLayout><Favorites /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/my-clothes" element={
                   <ProtectedRoute>
-                    <Layout><MyClothes /></Layout>
+                    <UserLayout><MyClothes /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/create" element={
                   <ProtectedRoute requiredRole="designer">
-                    <Layout><Create /></Layout>
+                    <UserLayout><Create /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/edit-cloth/:id" element={
                   <ProtectedRoute requiredRole="designer">
-                    <Layout><EditCloth /></Layout>
+                    <UserLayout><EditCloth /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/profile" element={
                   <ProtectedRoute>
-                    <Layout><Profile /></Layout>
+                    <UserLayout><Profile /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/order/:id" element={
                   <ProtectedRoute>
-                    <Layout><Order /></Layout>
+                    <UserLayout><Order /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/measurements" element={
                   <ProtectedRoute>
-                    <Layout><Measurements /></Layout>
+                    <UserLayout><Measurements /></UserLayout>
                   </ProtectedRoute>
                 } />
                 <Route path="/delivery-confirmation/:orderId" element={
                   <ProtectedRoute>
-                    <Layout><DeliveryConfirmation /></Layout>
+                    <UserLayout><DeliveryConfirmation /></UserLayout>
+                  </ProtectedRoute>
+                } />
+                <Route path="/kyc-verification" element={
+                  <ProtectedRoute>
+                    <UserLayout><KYCVerification /></UserLayout>
                   </ProtectedRoute>
                 } />
                 
-                {/* Admin Routes */}
+                {/* Admin Routes (Protected with AdminLayout) */}
                 <Route path="/admin" element={
                   <AdminRoute>
                     <AdminLayout><Admin /></AdminLayout>
@@ -150,9 +176,14 @@ const App = () => (
                     <AdminLayout><Analytics /></AdminLayout>
                   </AdminRoute>
                 } />
+                <Route path="/admin/kyc-review" element={
+                  <AdminRoute>
+                    <AdminLayout><AdminKYCReview /></AdminLayout>
+                  </AdminRoute>
+                } />
                 
                 {/* 404 Route */}
-                <Route path="*" element={<Layout><NotFound /></Layout>} />
+                <Route path="*" element={<LandingLayout><NotFound /></LandingLayout>} />
               </Routes>
             </ErrorBoundary>
           </BrowserRouter>

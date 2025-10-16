@@ -10,7 +10,6 @@ export interface ExportData {
     totalAllUsers: number;
     totalOrders: number;
     totalRevenue: number;
-    pendingKyc: number;
     activeDisputes: number;
     escrowBalance: number;
   };
@@ -66,7 +65,6 @@ export const exportToPDF = async (data: ExportData) => {
   yPosition = addText(`Total Orders: ${data.stats.totalOrders}`, 20, yPosition);
   yPosition = addText(`Total Revenue: $${data.stats.totalRevenue.toFixed(2)}`, 20, yPosition);
   yPosition = addText(`Escrow Balance: $${data.stats.escrowBalance.toFixed(2)}`, 20, yPosition);
-  yPosition = addText(`Pending KYC: ${data.stats.pendingKyc}`, 20, yPosition);
   yPosition = addText(`Active Disputes: ${data.stats.activeDisputes}`, 20, yPosition);
   yPosition += 15;
 

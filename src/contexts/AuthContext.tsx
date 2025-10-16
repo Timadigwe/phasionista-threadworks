@@ -12,6 +12,7 @@ interface Profile {
   avatar_url?: string;
   solana_wallet?: string;
   location?: string;
+  phone_number?: string;
   website?: string;
   social_links?: Record<string, string>;
   is_verified: boolean;

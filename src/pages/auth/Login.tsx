@@ -59,7 +59,7 @@ const Login = () => {
   };
 
   return (
-    <Layout showFooter={false}>
+    <>
       <div className="min-h-screen bg-gradient-to-br from-muted/30 via-background to-muted/30 flex items-center justify-center py-12 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -173,7 +173,7 @@ const Login = () => {
           </Card>
         </motion.div>
       </div>
-    </Layout>
+    </>
   );
 };
 

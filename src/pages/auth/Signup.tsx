@@ -115,7 +115,7 @@ export const Signup = () => {
   const isSignupReady = formData.acceptTerms && connected && publicKey && !isLoading;
 
   return (
-    <Layout showFooter={false}>
+    <>
       <div className="min-h-screen bg-gradient-to-br from-muted/30 via-background to-muted/30 flex items-center justify-center py-12 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -382,6 +382,6 @@ export const Signup = () => {
           </Card>
         </motion.div>
       </div>
-    </Layout>
+    </>
   );
 };
