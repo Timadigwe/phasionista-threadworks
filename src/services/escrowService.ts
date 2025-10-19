@@ -30,7 +30,7 @@ export interface EscrowOrder {
   cloth_id: string;
   amount: number;
   currency: 'SOL' | 'USDC';
-  status: 'pending' | 'paid' | 'shipped' | 'delivered' | 'released' | 'cancelled';
+  status: 'pending' | 'paid' | 'shipped' | 'delivered' | 'released' | 'cancelled' | 'refunded';
   vault_transaction?: string;
   release_transaction?: string;
   actual_amount_received?: number; // Actual amount received in vault
@@ -721,6 +721,178 @@ export const escrowService = {
     
     // Then confirm the fund release
     await this.confirmFundRelease(orderId, releaseResult.signature);
+  },
+
+  // Refund customer for cancelled orders or disputes
+  async refundCustomer(orderId: string, reason: string, refundedBy: string): Promise<{ transaction: string; signature: string }> {
+    if (!vaultKeypair) {
+      throw new Error('Vault private key not configured');
+    }
+
+    const { data: order, error } = await supabase
+      .from('escrow_orders')
+      .select(`
+        *,
+        customer:profiles!escrow_orders_customer_id_fkey(solana_wallet)
+      `)
+      .eq('id', orderId)
+      .single();
+
+    if (error) throw error;
+
+    if (!order.customer?.solana_wallet) {
+      throw new Error('Customer wallet not found');
+    }
+
+    const vaultPubkey = vaultKeypair.publicKey;
+    const customerPubkey = new PublicKey(order.customer.solana_wallet);
+    let signature: string;
+
+    try {
+      if (order.currency === 'SOL') {
+        // Check vault balance first
+        const vaultBalance = await connection.getBalance(vaultPubkey);
+        console.log('Vault balance (lamports):', vaultBalance);
+        console.log('Vault balance (SOL):', vaultBalance / LAMPORTS_PER_SOL);
+        
+        // Refund SOL - use actual amount received if available, otherwise use expected amount
+        const amountToRefund = order.actual_amount_received || order.amount;
+        const lamports = Math.floor(amountToRefund * LAMPORTS_PER_SOL);
+        
+        console.log('Amount to refund (SOL):', amountToRefund);
+        console.log('Amount to refund (lamports):', lamports);
+        
+        // Check if vault has enough balance
+        if (vaultBalance < lamports) {
+          throw new Error(`Insufficient vault balance for refund. Available: ${vaultBalance / LAMPORTS_PER_SOL} SOL, Required: ${amountToRefund} SOL`);
+        }
+        
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: vaultPubkey,
+            toPubkey: customerPubkey,
+            lamports
+          })
+        );
+
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = vaultPubkey;
+
+        // Sign and send transaction
+        signature = await sendAndConfirmTransaction(
+          connection,
+          transaction,
+          [vaultKeypair],
+          { commitment: 'confirmed' }
+        );
+
+        return {
+          transaction: transaction.serialize({ requireAllSignatures: false }).toString('base64'),
+          signature
+        };
+      } else {
+        // Refund USDC
+        const usdcMint = new PublicKey(USDC_MINT);
+        const vaultTokenAccount = await getAssociatedTokenAddress(usdcMint, vaultPubkey);
+        const customerTokenAccount = await getAssociatedTokenAddress(usdcMint, customerPubkey);
+
+        const transaction = new Transaction();
+
+        // Check if customer has USDC token account, create if not
+        const customerTokenAccountInfo = await connection.getAccountInfo(customerTokenAccount);
+        if (!customerTokenAccountInfo) {
+          transaction.add(
+            createAssociatedTokenAccountInstruction(
+              vaultPubkey, // payer
+              customerTokenAccount, // ata
+              customerPubkey, // owner
+              usdcMint // mint
+            )
+          );
+        }
+
+        // Use actual amount received if available, otherwise use expected amount
+        const amountToRefund = order.actual_amount_received || order.amount;
+        
+        // Add transfer instruction
+        transaction.add(
+          createTransferInstruction(
+            vaultTokenAccount,
+            customerTokenAccount,
+            vaultPubkey,
+            Math.floor(amountToRefund * 1e6) // USDC has 6 decimals
+          )
+        );
+
+        const { blockhash } = await connection.getLatestBlockhash();
+        transaction.recentBlockhash = blockhash;
+        transaction.feePayer = vaultPubkey;
+
+        // Sign and send transaction
+        signature = await sendAndConfirmTransaction(
+          connection,
+          transaction,
+          [vaultKeypair],
+          { commitment: 'confirmed' }
+        );
+
+        return {
+          transaction: transaction.serialize({ requireAllSignatures: false }).toString('base64'),
+          signature
+        };
+      }
+    } catch (error: any) {
+      console.error('Error refunding customer:', error);
+      
+      // Enhanced error handling for Solana transaction errors
+      if (error.name === 'SendTransactionError') {
+        console.error('Transaction simulation failed:', error.message);
+        if (error.logs) {
+          console.error('Transaction logs:', error.logs);
+        }
+        throw new Error(`Refund transaction failed: ${error.message}. Check vault balance and try again.`);
+      } else if (error.message?.includes('Insufficient vault balance')) {
+        throw error; // Re-throw our custom error
+      } else {
+        throw new Error(`Failed to refund customer: ${error.message}`);
+      }
+    } finally {
+      // Update order status to refunded and record refund details
+      if (signature) {
+        try {
+          await supabase
+            .from('escrow_orders')
+            .update({
+              status: 'refunded',
+              refund_transaction: signature,
+              refund_reason: reason,
+              refunded_at: new Date().toISOString(),
+              refunded_by: refundedBy,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', orderId);
+
+          // Send notification to customer about refund
+          await notificationService.createNotification({
+            user_id: order.customer_id,
+            type: 'order_refunded',
+            title: 'Order Refunded',
+            message: `Your order has been refunded. Reason: ${reason}. Transaction: ${signature}`,
+            data: {
+              order_id: orderId,
+              reason,
+              refunded_by: refundedBy,
+              transaction: signature
+            },
+            is_read: false
+          });
+        } catch (notificationError) {
+          console.error('Error sending refund notification:', notificationError);
+          // Don't throw error here to avoid breaking the refund process
+        }
+      }
+    }
   },
 
   // Create a dispute/alarm for delivery issues

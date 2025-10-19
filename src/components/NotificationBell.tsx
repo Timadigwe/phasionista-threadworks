@@ -49,6 +49,7 @@ export const NotificationBell = () => {
       case 'order_shipped':
       case 'order_delivered':
       case 'order_cancelled':
+      case 'order_refunded':
         if (notification.data?.order_id) {
           navigateToOrder(notification.data.order_id);
         }
@@ -81,6 +82,8 @@ export const NotificationBell = () => {
         return '✅';
       case 'order_cancelled':
         return '❌';
+      case 'order_refunded':
+        return '💸';
       default:
         return '🔔';
     }
@@ -98,6 +101,8 @@ export const NotificationBell = () => {
         return 'text-emerald-600';
       case 'order_cancelled':
         return 'text-red-600';
+      case 'order_refunded':
+        return 'text-orange-600';
       default:
         return 'text-gray-600';
     }

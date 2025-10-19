@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { escrowService, EscrowOrder } from "@/services/escrowService";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { DisputeReportModal } from "@/components/DisputeReportModal";
 
 const statusConfig = {
   pending: { label: 'Pending Payment', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
@@ -26,7 +27,8 @@ const statusConfig = {
   shipped: { label: 'Shipped', color: 'bg-purple-100 text-purple-800', icon: Truck },
   delivered: { label: 'Delivered', color: 'bg-green-100 text-green-800', icon: CheckCircle },
   released: { label: 'Completed', color: 'bg-gray-100 text-gray-800', icon: CheckCircle },
-  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800', icon: AlertCircle }
+  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800', icon: AlertCircle },
+  refunded: { label: 'Refunded', color: 'bg-orange-100 text-orange-800', icon: CheckCircle }
 };
 
 export const Orders = () => {
@@ -35,6 +37,8 @@ export const Orders = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [disputeModalOpen, setDisputeModalOpen] = useState(false);
+  const [selectedOrderForDispute, setSelectedOrderForDispute] = useState<EscrowOrder | null>(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -112,6 +116,16 @@ export const Orders = () => {
       console.error('Error raising alarm:', error);
       toast.error('Failed to report issue');
     }
+  };
+
+  const handleOpenDisputeModal = (order: EscrowOrder) => {
+    setSelectedOrderForDispute(order);
+    setDisputeModalOpen(true);
+  };
+
+  const handleCloseDisputeModal = () => {
+    setDisputeModalOpen(false);
+    setSelectedOrderForDispute(null);
   };
 
   return (
@@ -289,14 +303,15 @@ export const Orders = () => {
                           </div>
                           <div className="bg-blue-50 rounded-lg p-4 space-y-3">
                             {order.status === 'delivered' && (
-                              <Button
-                                size="sm"
-                                className="w-full bg-green-600 hover:bg-green-700"
-                                onClick={() => handleMarkAsDelivered(order.id)}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Mark as Delivered
-                              </Button>
+                              <div className="text-center">
+                                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                                <p className="text-sm font-medium text-green-800">
+                                  Order delivered successfully
+                                </p>
+                                <p className="text-xs text-green-600 mt-1">
+                                  Waiting for admin to release payment
+                                </p>
+                              </div>
                             )}
                             {order.status === 'paid' && (
                               <div className="text-center">
@@ -332,7 +347,7 @@ export const Orders = () => {
                                     size="sm"
                                     variant="destructive"
                                     className="flex-1"
-                                    onClick={() => handleRaiseAlarm(order.id)}
+                                    onClick={() => handleOpenDisputeModal(order)}
                                   >
                                     <AlertCircle className="h-4 w-4 mr-2" />
                                     Report Issue
@@ -345,6 +360,17 @@ export const Orders = () => {
                                 <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-600" />
                                 <p className="text-sm font-medium text-green-800">
                                   Payment released to designer
+                                </p>
+                              </div>
+                            )}
+                            {order.status === 'refunded' && (
+                              <div className="text-center">
+                                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-orange-600" />
+                                <p className="text-sm font-medium text-orange-800">
+                                  Order refunded
+                                </p>
+                                <p className="text-xs text-orange-600 mt-1">
+                                  Your payment has been refunded
                                 </p>
                               </div>
                             )}
@@ -428,6 +454,21 @@ export const Orders = () => {
           </motion.div>
         )}
       </div>
+
+      {/* Dispute Report Modal */}
+      <DisputeReportModal
+        isOpen={disputeModalOpen}
+        onClose={handleCloseDisputeModal}
+        orderId={selectedOrderForDispute?.id || ''}
+        orderDetails={selectedOrderForDispute ? {
+          id: selectedOrderForDispute.id,
+          amount: selectedOrderForDispute.amount,
+          currency: selectedOrderForDispute.currency,
+          status: selectedOrderForDispute.status,
+          cloth_name: 'Cloth Item', // You might want to fetch this from the order data
+          designer_name: 'Designer' // You might want to fetch this from the order data
+        } : undefined}
+      />
     </div>
   );
 };

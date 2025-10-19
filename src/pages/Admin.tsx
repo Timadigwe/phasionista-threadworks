@@ -81,6 +81,7 @@ interface Dispute {
   customer_name: string;
   designer_name: string;
   reason: string;
+  description: string;
   status: string;
   created_at: string;
   resolution_notes?: string;
@@ -222,6 +223,52 @@ export const Admin = () => {
 
   const handleDisputeResolution = async (disputeId: string, resolution: string, decision: 'customer' | 'designer') => {
     try {
+      // Get dispute details to access order information
+      const { data: dispute, error: disputeError } = await supabase
+        .from('disputes')
+        .select(`
+          *,
+          order:escrow_orders!disputes_order_id_fkey(
+            id,
+            status,
+            amount,
+            currency,
+            customer_id,
+            designer_id
+          )
+        `)
+        .eq('id', disputeId)
+        .single();
+
+      if (disputeError) throw disputeError;
+
+      if (decision === 'customer') {
+        // Refund customer
+        try {
+          await escrowService.refundCustomer(
+            dispute.order.id, 
+            `Dispute resolved in favor of customer: ${resolution}`,
+            user?.id || 'admin'
+          );
+          toast.success('Dispute resolved: Customer refunded successfully');
+        } catch (refundError: any) {
+          console.error('Error refunding customer:', refundError);
+          toast.error(`Failed to refund customer: ${refundError.message}`);
+          return; // Don't update dispute status if refund failed
+        }
+      } else if (decision === 'designer') {
+        // Release funds to designer
+        try {
+          await escrowService.releaseFunds(dispute.order.id);
+          toast.success('Dispute resolved: Funds released to designer');
+        } catch (releaseError: any) {
+          console.error('Error releasing funds to designer:', releaseError);
+          toast.error(`Failed to release funds: ${releaseError.message}`);
+          return; // Don't update dispute status if release failed
+        }
+      }
+
+      // Update dispute status
       const { error } = await supabase
         .from('disputes')
         .update({
@@ -556,16 +603,31 @@ export const Admin = () => {
                           <Badge variant="destructive">Open</Badge>
                         </div>
                         <p className="text-sm mb-3">{dispute.reason}</p>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Description: {dispute.description}
+                        </p>
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline">
                             <Eye className="h-4 w-4 mr-1" />
                             Review Details
-                  </Button>
-                          <Button size="sm" variant="outline">
-                            <MessageSquare className="h-4 w-4 mr-1" />
-                            Resolve
-                  </Button>
-                  </div>
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={() => handleDisputeResolution(dispute.id, 'Resolved in favor of customer', 'customer')}
+                          >
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            Refund Customer
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="default"
+                            onClick={() => handleDisputeResolution(dispute.id, 'Resolved in favor of designer', 'designer')}
+                          >
+                            <Package className="h-4 w-4 mr-1" />
+                            Release to Designer
+                          </Button>
+                        </div>
                   </div>
                     ))}
                   </div>
