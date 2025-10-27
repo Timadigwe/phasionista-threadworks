@@ -79,8 +79,10 @@ export const MyClothes = () => {
               </p>
             </div>
             <Button className="btn-hero">
-              <Plus className="h-4 w-4 mr-2" />
-              Add New Item
+              <Link to="/create" className="flex items-center gap-2">
+                <Plus className="h-4 w-4 mr-2" />
+                Add New Item
+              </Link> 
             </Button>
           </motion.div>
         </div>

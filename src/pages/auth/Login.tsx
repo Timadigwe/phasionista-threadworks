@@ -42,7 +42,11 @@ const Login = () => {
             
           if (profile?.role === 'admin') {
             navigate("/admin");
-          } else {
+          } 
+          else if (profile?.role === 'designer') {
+            navigate("/my-clothes");
+          }
+          else {
             navigate("/clothes");
           }
         } catch (error: any) {

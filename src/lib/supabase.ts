@@ -17,11 +17,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder-key', {
   auth: {
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    // Session management configuration
+    persistSession: true,
+    autoRefreshToken: true,
+    // Session timeout is controlled by Supabase JWT_EXPIRY setting
   }
 })
 
 console.log('✅ Supabase client created successfully');
-console.log('  Client URL:', supabase.supabaseUrl);
-console.log('  Auth URL:', supabase.auth.url);
+console.log('  Configuration URL:', supabaseUrl);
+console.log('  Environment:', import.meta.env.MODE);
 

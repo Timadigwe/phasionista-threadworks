@@ -213,7 +213,7 @@ export const Dashboard = () => {
   };
 
   const fetchDesignerData = async () => {
-    // Fetch designer's orders (orders for their items)
+    // Fetch designer's completed sales (delivered or released orders only)
     const { data: orders, error: ordersError } = await supabase
       .from('escrow_orders')
       .select(`
@@ -227,11 +227,15 @@ export const Dashboard = () => {
           profiles!inner(phasion_name)
         )
       `)
-      .eq('clothes.designer_id', user?.id)
+      .eq('designer_id', user?.id)
+      .in('status', ['delivered', 'released'])
       .order('created_at', { ascending: false })
       .limit(5);
 
-    if (ordersError) throw ordersError;
+    if (ordersError) {
+      console.error('Error fetching designer orders:', ordersError);
+      throw ordersError;
+    }
 
     // Fetch designer's items
     const { data: items, error: itemsError } = await supabase
@@ -241,18 +245,23 @@ export const Dashboard = () => {
 
     if (itemsError) throw itemsError;
 
-    // Calculate total revenue from completed orders
+    // Calculate total revenue from completed sales (delivered and released)
     const totalRevenue = orders?.reduce((sum, order) => {
-      if (order.status === 'delivered') {
+      if (order.status === 'delivered' || order.status === 'released') {
         return sum + (order.amount || 0);
       }
       return sum;
     }, 0) || 0;
 
-    // Count pending orders
-    const pendingOrders = orders?.filter(order => 
-      order.status === 'paid' || order.status === 'pending'
-    ).length || 0;
+    // Count pending orders (separate query for pending orders)
+    const { data: pendingOrdersData, error: pendingError } = await supabase
+      .from('escrow_orders')
+      .select('id')
+      .eq('designer_id', user?.id)
+      .in('status', ['paid', 'shipped']);
+
+    if (pendingError) throw pendingError;
+    const pendingOrders = pendingOrdersData?.length || 0;
 
     // Format recent orders for designer view
     const formattedOrders: RecentOrder[] = orders?.map(order => {
@@ -263,9 +272,8 @@ export const Dashboard = () => {
         id: order.id,
         item: cloth?.name || 'Unknown Item',
         designer: designer?.phasion_name || 'Unknown Designer',
-        status: order.status === 'paid' ? 'In Progress' : 
-                order.status === 'delivered' ? 'Delivered' : 
-                order.status === 'shipped' ? 'Shipped' : 'Pending',
+        status: order.status === 'delivered' ? 'Completed' : 
+                order.status === 'released' ? 'Payment Released' : 'Completed',
         date: new Date(order.created_at).toLocaleDateString(),
         amount: order.currency === 'SOL' 
           ? `${order.amount || 0} SOL`
@@ -634,14 +642,18 @@ export const Dashboard = () => {
                   {isLoading ? (
                     <div className="space-y-4">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center justify-between p-4 border rounded-lg animate-pulse">
-                          <div className="flex-1">
-                            <div className="h-4 bg-muted rounded w-1/3 mb-2"></div>
-                            <div className="h-3 bg-muted rounded w-1/2"></div>
-                          </div>
-                          <div className="text-right">
-                            <div className="h-4 bg-muted rounded w-16 mb-2"></div>
-                            <div className="h-8 bg-muted rounded w-20"></div>
+                        <div key={i} className="p-4 border rounded-lg animate-pulse">
+                          <div className="flex items-start gap-4">
+                            <div className="w-16 h-16 bg-muted rounded-lg"></div>
+                            <div className="flex-1">
+                              <div className="h-4 bg-muted rounded w-1/3 mb-2"></div>
+                              <div className="h-3 bg-muted rounded w-1/2 mb-2"></div>
+                              <div className="h-3 bg-muted rounded w-1/4"></div>
+                            </div>
+                            <div className="text-right">
+                              <div className="h-4 bg-muted rounded w-16 mb-2"></div>
+                              <div className="h-8 bg-muted rounded w-20"></div>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -649,30 +661,36 @@ export const Dashboard = () => {
                   ) : recentOrders.length > 0 ? (
                     <div className="space-y-4">
                       {recentOrders.map((order) => (
-                        <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-medium">{order.item}</h4>
-                              <Badge 
-                                variant={
-                                  order.status === "Delivered" ? "default" :
-                                  order.status === "In Progress" ? "secondary" : "outline"
-                                }
-                              >
-                                {order.status}
-                              </Badge>
+                        <div key={order.id} className="p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => window.location.href = '/designer/orders'}>
+                          <div className="flex items-start gap-4">
+                            <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                              <Package className="h-8 w-8 text-muted-foreground" />
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              by {order.designer} • {order.date}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold">{order.amount}</p>
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link to={`/order/${order.id}`}>
-                                View Details
-                              </Link>
-                            </Button>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium">{order.item}</h4>
+                                <Badge 
+                                  variant={
+                                    order.status === "Completed" ? "default" :
+                                    order.status === "Payment Released" ? "default" :
+                                    order.status === "Delivered" ? "default" :
+                                    order.status === "In Progress" ? "secondary" : "outline"
+                                  }
+                                >
+                                  {order.status}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mb-1">
+                                {profile?.role === 'designer' ? `Customer: ${order.designer}` : `Designer: ${order.designer}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Order Date: {order.date}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-lg">{order.amount}</p>
+                              <p className="text-xs text-muted-foreground">Click to view details</p>
+                            </div>
                           </div>
                         </div>
                       ))}

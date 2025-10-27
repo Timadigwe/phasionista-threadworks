@@ -97,12 +97,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (including session expiry)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state change:', event, session?.user?.id);
         
-        // Handle sign out events
+        // Handle sign out events (including session expiry)
         if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
@@ -110,13 +110,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           return;
         }
         
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          console.log('AuthContext: User authenticated, setting profile to null (will be fetched when needed)');
-          setProfile(null);
-        } else {
-          setProfile(null);
-          setIsLoading(false);
+        // Handle token refresh and session updates
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            console.log('AuthContext: User authenticated, setting profile to null (will be fetched when needed)');
+            setProfile(null);
+          } else {
+            setProfile(null);
+            setIsLoading(false);
+          }
         }
       }
     );
@@ -266,6 +269,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     if (error) throw error;
   };
+
 
   const value: AuthContextType = {
     user,
